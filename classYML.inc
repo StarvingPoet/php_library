@@ -20,9 +20,9 @@ class YAML {
     private $error       = false;
     private $errorStatus = 0;
     private $errorLog    = '';
-    
+
     public function __construct($fileName, $pos = -1)
-    {      
+    {
         $this->fileName = $fileName;
 
         if (!is_file($this->fileName))
@@ -31,18 +31,18 @@ class YAML {
         }
         else
         {
-            if (extension_loaded(yaml))
+            if (extension_loaded('yaml'))
             {
                 $this->YAMLArray = yaml_parse_file($this->fileName, $pos, $ndocs, array(YAML_BOOL_TAG => array($this, 'yaml_tag_callback'),
-                                                                                      true => array($this, 'yaml_tag_callback')));
+                                                                                      'true' => array($this, 'yaml_tag_callback')));
             }
             else
             {
-                $this->fileArray = explode(PHP_EOL, file_get_contents($this->fileName));			
-                $this->YAMLArray = $this->YAMLtoArray();  
+                $this->fileArray = explode(PHP_EOL, file_get_contents($this->fileName));
+                $this->YAMLArray = $this->YAMLtoArray();
             }
-        }        
-        
+        }
+
         $this->fileArray = array();
     }
 
@@ -67,7 +67,7 @@ class YAML {
 
         $error = date('[Y.m.d H:i:s]').":\t Error in (".$method.") - ".$details."\r\n";
         file_put_contents($this->errorLog, $error, FILE_APPEND);
-        
+
         //throw new exception ($details, $this->errorStatus);
     }
 
@@ -83,14 +83,14 @@ class YAML {
         else if ($value == 'STR_AKSU74')
         {
             var_dump(func_get_args());
-            
+
         }
         return;
     }
 
     /**
-     * DEPRECATED - for use without 
-     * Transforms YAML string into an array.  
+     * DEPRECATED - for use without
+     * Transforms YAML string into an array.
      * @TODO    Create an object based filereader so I don't need to take this extra step.
      *
      * @offset  Used to keep track of how deep into the file we are recursing.
@@ -107,16 +107,16 @@ class YAML {
         {
             $this->fileArray = array_reverse($this->fileArray);
         }
-            
+
         /* Go by line, delete line as you go to prevent memory bloat */
         for ($i = 0; $line = array_pop($this->fileArray), !is_null($line); $i++)
-        {		
+        {
             //$line   = array_pop($this->fileArray);
 
             /* Checks to see if the line has the right offset */
             $search = '/^\s{'.$offset.'}(- )?\S+:?/';
-            $check1 = preg_match($search, $line, $ret);		
-		
+            $check1 = preg_match($search, $line, $ret);
+
 
             if ($check1 != false)
             {
@@ -124,15 +124,15 @@ class YAML {
                 $ret1          = array();
                 $escapedString = false;
                 $search2       = '/- ".*"$/';
-                $check2        = preg_match($search2, $line, $ret1);	  
+                $check2        = preg_match($search2, $line, $ret1);
 
                 /* else standard use */
                 if ($check2 == 0)
                 {
                     $search2  = '/:.+$/';
-                    $check2   = preg_match($search2, $line, $ret1);	 
+                    $check2   = preg_match($search2, $line, $ret1);
                 }
-                else 
+                else
                 {
                     $escapedString = true;
                 }
@@ -147,26 +147,26 @@ class YAML {
                 /* Row is simple key: value pair */
                 else if ($check2 != false && stripos($ret[0], "-") === false)
                 {
-                    $v = trim(str_replace(':','',$ret1[0]));			
-                    $return[$k] = $v;				
+                    $v = trim(str_replace(':','',$ret1[0]));
+                    $return[$k] = $v;
                 }
                 /* if row is just '-' (only used in shipping lane missions )*/
                 else if (trim($ret[0]) == '-')
-                {				
-                    $k = $i;				
+                {
+                    $k = $i;
                 }
                 /* If row is a list of escaped strings */
-                else if (stripos($ret[0], str_repeat(" ", $offset)."-") !== false  && $escapedString === true)                      
-                {		
+                else if (stripos($ret[0], str_repeat(" ", $offset)."-") !== false  && $escapedString === true)
+                {
                     $v = trim(str_replace("- ","", $ret1[0]));
-                    $return[$i] = $v;						
-                }                
+                    $return[$i] = $v;
+                }
                 /* If row is a simple list or row is an escaped string */
-                else if (stripos($ret[0], str_repeat(" ", $offset)."-") !== false  && stripos($ret[0], ":") === false)                      
-                {		
+                else if (stripos($ret[0], str_repeat(" ", $offset)."-") !== false  && stripos($ret[0], ":") === false)
+                {
                     $v = trim(str_replace("- ","", $ret[0]));
-                    $return[$i] = $v;						
-                }                
+                    $return[$i] = $v;
+                }
                 /* if row is the first line in a list of arrays */
                 else if (stripos($ret[0], str_repeat(" ", $offset)."-") !== false  && stripos($ret[0], ":") !== false)
                 {
@@ -182,14 +182,14 @@ class YAML {
                 }
                 /** Row is just a key  - array should start on the next line; here for debug **/
                 else
-                {                                     
-                    //FB::log($line);				
+                {
+                    //FB::log($line);
                 }
             }
 
             /* if offset is greater, recurse in steps of 2*/
             else if (preg_match('/^\s{'.($offset+2).',}\S+/', $line) != false)
-            {	
+            {
                 array_push($this->fileArray, $line);
                 $recurse = $this->YAMLtoArray($offset+2);
 
@@ -246,7 +246,7 @@ class YAML {
             {
                 $key = "- ";
             }
-            
+
             /* Single - case scenario */
             if ($k == 7 && $depth == 0)
             {
@@ -277,14 +277,14 @@ class YAML {
                 /* Strip excess white space */
                 $pattern     = '/-\s+/';
                 $replacement = '- ';
-                
+
                 $array[$k] .= $this->ArraytoYAML($row, $depth+1);
                 $array[$k] = preg_replace($pattern, $replacement, $array[$k]);
             }
             else if	(is_array($row))
             {
                 $array[$k] .= PHP_EOL.$this->ArraytoYAML($row, $depth+1);
-            }		
+            }
             else
             {
                 $array[$k] .= $row;
@@ -337,6 +337,6 @@ class YAML {
             $file = $this->fileName;
         }
         return file_put_contents($file, $string);
-    }   
+    }
 }
 ?>

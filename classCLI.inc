@@ -15,18 +15,25 @@
  */
 
 class CLI {
-    var $cols; 
+    var $cols;
     var $rows;
-    var $multiline;  
+    var $multiline;
+
+    var $stdout;
+    var $stdin;
+
 
     /**
      * Old style constructor - defaults are for standard windows cmd line.  $cols = width - 1 to allow for EOL.
-     */        
+     */
     function __construct($title, $cols = 80, $rows = 25)
     {
+        $this->stdout = fopen('php://stdout' , 'w');
+        $this->stdin  = fopen('php://stdin' , 'r');
+
         /* Initialie variables */
         $this->cols      = ($cols -1); /** have to shrink by one to prevent Wordwrap **/
-        $this->rows      = $rows; 
+        $this->rows      = $rows;
         $this->multiline = 0;
 
         /** Resize the cmd window **/
@@ -61,17 +68,18 @@ class CLI {
      * @=echo can be a string or array of strings.
      */
     function clout($echo, $truncate = true, $cols = NULL)
-    {   
-        if (is_array($echo) || (strlen($str) > $this->cols && $truncate == false))
+    {
+        if (is_array($echo) || (strlen($echo) > $this->cols && $truncate == false))
         {
             $this->clmulti($echo, $truncate, $cols);
         }
         else
         {
             /* Reset any previous multiline output */
-            $this->multiline = 0; 
-            fwrite(STDOUT, $echo);
+            $this->multiline = 0;
+            fwrite($this->stdout, $echo);
         }
+        @ob_flush();
     }
 
     /**
@@ -79,7 +87,7 @@ class CLI {
      */
     function cloutf($echo)
     {
-        fwrite(STDOUT, sprintf("\r%-79.79s", $echo));
+        fwrite($this->stdout, sprintf("\r%-79.79s", $echo));
     }
 
     /**
@@ -108,7 +116,7 @@ class CLI {
             $beginning = substr($echo, 0, $stop);
             $echo = $beginning.$middle.$end;
         }
-        fwrite(STDOUT, sprintf("\r%-79.79s", $echo));
+        fwrite($this->stdout, sprintf("\r%-79.79s", $echo));
     }
 
     /* Clears out the current line and moves the cursor up one row */
@@ -117,43 +125,47 @@ class CLI {
         /** formula for sprintf to fill the entire line **/
         $format = "%".$this->cols."s";
 
-        fwrite(STDOUT, chr(27) . "[0G"); // Set cursor to the first col
-        fwrite(STDOUT, sprintf($format, ""));        
-        fwrite(STDOUT, chr(27) . "[1A"); // Set cursor up one row
+        fwrite($this->stdout, chr(27) . "[0G"); // Set cursor to the first col
+        fwrite($this->stdout, sprintf($format, ""));
+        fwrite($this->stdout, chr(27) . "[1A"); // Set cursor up one row
     }
 
     function clearLineTest()
     {
-        /** formula for sprintf to fill the entire line **/
+
+        /** formula for sprintf to fill the entire line **
         $format = "%".$this->cols."s";
 
-        fwrite(STDOUT, "\$e[0G"); // Set cursor to the first col
-        fwrite(STDOUT, sprintf($format, ""));        
-        fwrite(STDOUT, "\$e[1A"); // Set cursor up one row
+        fwrite($this->stdout, "\$e[0G"); // Set cursor to the first col
+        fwrite($this->stdout, sprintf($format, ""));
+        fwrite($this->stdout, "\$e[1A"); // Set cursor up one row
+        */
     }
 
-    /* 
+    /*
      * Windows CMD friendly CLS
      */
     function cls()
     {
+        fwrite($this->stdout, chr(27).chr(91).'H'.chr(27).chr(91).'J');
+
         /* work back up cleaning every line as you go, do a few extra to make sure*/
         for ($i = -5; $i <= $this->rows; $i++)
         {
-            $this->clearLine();
+            $this->clearLineTest();
         }
     }
 
     /**
-     * Multiline output that overwrites itself 
+     * Multiline output that overwrites itself
      * Original idea from nolanpro: http://stackoverflow.com/questions/4320081/clear-php-cli-output/11424357
      *
      * @str Multiline strine
      * @col Number of columns - windows default of (80-1)
      * @truncate Whether or not to truncate long lines.
      */
-    function clmulti($str, $truncate = true, $cols = NULL) 
-    { 
+    function clmulti($str, $truncate = true, $cols = NULL)
+    {
         if (is_null($cols))
         {
             $cols = $this->cols;
@@ -161,7 +173,7 @@ class CLI {
 
         /** formula for sprintf to fill the entire line **/
         $format = "\r%-".$cols.".".$cols."s";
-        
+
         /** fix extra long lines */
         if (is_string($str))
         {
@@ -174,11 +186,11 @@ class CLI {
         else
         {
             $this->clerr('clmulti: invalid $str type');
-            return false;   
+            return false;
         }
         $str = NULL;
 
-        for ($i = 0; $i < count($output); $i++)           
+        for ($i = 0; $i < count($output); $i++)
         {
             if (strlen($output[$i]) >= $cols)
             {
@@ -192,7 +204,7 @@ class CLI {
                     array_splice($output, $i, 1, $wordWrap);
                     unset($wordWrap);
                 }
-            }            
+            }
 
             /* Format each line to take up the full space */
             $output[$i] = sprintf($format, $output[$i]);
@@ -206,12 +218,12 @@ class CLI {
         $this->multiline = $i-1;
 
         /*  And, finally, output the line */
-        $str = implode("\n", $output);     
-        fwrite(STDOUT,"\r"); // Set cursor to first column
-        fwrite(STDOUT,$str);
+        $str = implode("\n", $output);
+        fwrite($this->stdout,"\r"); // Set cursor to first column
+        fwrite($this->stdout,$str);
 
         $output = NULL;
-        $str    = NULL;        
+        $str    = NULL;
 
         return true;
     }
@@ -221,7 +233,7 @@ class CLI {
      */
     function clog($echo)
     {
-        fwrite(STDOUT, "* ".$echo);
+        fwrite($this->stdout, "* ".$echo);
     }
 
     /**
@@ -248,7 +260,7 @@ class CLI {
      */
     function clint(&$return, $length)
     {
-        $echo = fgets(STDIN, $length);
+        $echo = $this->clint($echo, $length);
         $echo = trim($echo);
         $return = $echo;
     }
@@ -366,7 +378,7 @@ class CLI {
     function forkCLIScript($path, $script, $id, $sites)
     {
         /*
-        $batch = $GLOBALS['global']['tempDir'].$script.'_'.$id.'.bat';
+        $batch = $GLOBALS['global']['tempdir'].$script.'_'.$id.'.bat';
 
         if (!is_file($batch))
         {
@@ -411,7 +423,7 @@ class CLI {
 
         if ($log)
         {
-            $fh = fopen($GLOBALS['global']['tempDir']."CLI.log", "w");
+            $fh = fopen($GLOBALS['global']['tempdir']."CLI.log", "w");
         }
 
         if ($fork)
@@ -424,7 +436,9 @@ class CLI {
                                 2 => array("pipe", "w"));
         $env = NULL;
 
-        $process = proc_open('php.exe -f '.$path.$script." ".$arguments.$direct, $descriptorspec, $pipes, $path, $env);
+        $procString = 'php.exe -f '.$path.$script." ".$arguments.$direct;
+        print_r($procString);
+        $process = proc_open($procString, $descriptorspec, $pipes, $path, $env);
 
         if (is_resource($process))
         {
@@ -465,7 +479,7 @@ class CLI {
                 $this->checkError($echo);
                 $this->clout($echo);
 
-//                winSleep(1);
+                //winSleep(1);
             }
 
             fclose($pipes[0]);
@@ -482,25 +496,26 @@ class CLI {
             // proc_close in order to avoid a deadlock
             $return = proc_close($process);
         }
+        sleep(2);
         return $return;
     }
 
     function parseHTMLtoCLI($echo)
     {
         /** convert tags to Ascii characters **/
-//        $echo = str_ireplace("\n"              , ""       ,$echo);
+        //$echo = str_ireplace("\n"              , ""       ,$echo);
         $echo = str_ireplace("<br>"            , "<br />" , $echo);
         $echo = str_ireplace("<br />"          , "\n"     , $echo);
         $echo = str_ireplace("</td><td>"       , "\t"     , $echo);
         $echo = str_ireplace("</tr><tr>"       , "\n"     , $echo);
         $echo = str_ireplace("</p>"            , "\n"     , $echo);
-//        $echo = str_ireplace("\r"              , "\n"     , $echo);
+        //$echo = str_ireplace("\r"              , "\n"     , $echo);
         $echo = eregi_replace("<(/?)b[^\>]*\>" , "***"    , $echo);
 
 
 
         /** clean unwanted tags **/
-//        $echo = eregi_replace("<(/?)[^\>]*\>"        , "", $echo);
+        //$echo = eregi_replace("<(/?)[^\>]*\>"        , "", $echo);
         $echo = eregi_replace("<(/?)a[^\>]*\>"        , "", $echo);
         $echo = eregi_replace("<(/?)p[^\>]*\>"        , "", $echo);
         $echo = eregi_replace("<(/?)div[^\>]*\>"      , "", $echo);
