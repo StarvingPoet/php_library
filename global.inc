@@ -13,31 +13,24 @@
 $global = array();
 
 
-/*
-$global["MySQL_Server"]   = '65.60.14.69';
-$global["MySQL_Username"] = 'ltl_boss';
-$global["MySQL_Password"] = 'tKOqOUQ51Bd2sipl';
-$global["MySQL_Database"] = 'ltl_main';
-*/
-$global['SQLLOG']             = false;
+/* mySQL */
+    //$global["MySQL_Server"]       = '';
+    //$global["MySQL_Username"]     = '';
+    //$global["MySQL_Password"]     = '';
+    //$global["MySQL_Database"]     = '';
+    //$global['SQLLOG']             = false;
 
-/* Email *
-$global["EmailFromName"]      = "LTL Finder";
-$global["EmailFromAddress"]   = "mailer@ltlfinder.com";
-$global["SMTPMode"]           = "enabled"; // enabled or disabled
-$global["SMTPHost"]           = "ssl://smtp.gmail.com";
-$global["SMTPPort"]           = 465;
-$global["SMTPUserName"]       = "mailer@ltlfinder.com";
-$global["SMTPPassword"]       = "leslie07";
+/* Email */
+    //$global["EmailFromName"]      = "";
+    //$global["EmailFromAddress"]   = "";
+    //$global["SMTPMode"]           = "enabled"; // enabled or disabled
+    //$global["SMTPHost"]           = "ssl://smtp.gmail.com";
+    //$global["SMTPPort"]           = 465;
+    //$global["SMTPUserName"]       = "";
+    //$global["SMTPPassword"]       = "";
 
 
-if ((isset($_SERVER["SERVER_NAME"])  && (stripos($_SERVER["SERVER_NAME"], 'dev') !== false        || stripos($_SERVER["SERVER_NAME"], '.') === false))
-  ||(isset($_SERVER['COMPUTERNAME']) && (stripos($_SERVER['COMPUTERNAME'], 'LYNNFIELD') !== false || stripos($_SERVER['COMPUTERNAME'], 'STUDIO17') !== false )))
-{
-    $global['scriptPath'] = 'D:/Website/Automation Scripts/scripts';
-}
 
-*/
 
 $global['scriptPath']         = getcwd()."/_script/";
 $global['logPath']            = getcwd()."/_logs/";
