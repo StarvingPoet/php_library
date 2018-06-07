@@ -8,10 +8,10 @@
  * @filesource
  *
  * @version    2009.02.23 Initial Creation
+ * @version    2018.06.07 What year is it?
  */
 
 $global = array();
-
 
 /* mySQL */
     //$global["MySQL_Server"]       = '';
@@ -28,8 +28,6 @@ $global = array();
     //$global["SMTPPort"]           = 465;
     //$global["SMTPUserName"]       = "";
     //$global["SMTPPassword"]       = "";
-
-
 
 
 $global['scriptPath']         = getcwd()."/_script/";
