@@ -20,10 +20,9 @@ class OXC {
     var $mfgBase = 2;
     
     /**
-     *
+     * Initiated with pointer to mod directory
      */
-    public function __construct($modDir)
-    {
+    public function __construct($modDir) {
         if (is_dir($modDir))
         {
             $this->collectMods($modDir);    
@@ -35,8 +34,7 @@ class OXC {
 
     }
 
-    function __destruct()
-    {
+    function __destruct() {
         $this->mods = NULL;
     }
 
@@ -47,8 +45,7 @@ class OXC {
      * @details  text string that will be returned in the email and in the exception.
      * @return   array that will be returned in the errorStatus variable to be processed by the script that called the class
      */
-    private function _errorHandler($method, $details, $return = null)
-    {
+    private function _errorHandler($method, $details, $return = null) {
         $this->error       = true;
         $this->errorStatus = 1;
         $this->errorLog    = $GLOBALS['global']['logPath'].'classOXC.log';
@@ -59,8 +56,7 @@ class OXC {
         throw new exception ($details, $this->errorStatus);
     }
 
-    public function collectMods($dir, $level = 0)
-    {
+    public function collectMods($dir, $level = 0) {
         /** We only deal with direct mod directories, or a parent containing mods - we will never recurse more than once **/
         if ($level > 1)
         {
@@ -101,7 +97,7 @@ class OXC {
                     }
                     $cacheName = md5($modName.' ver: '.$yaml->YAMLArray['version']);
                     $cacheFile = $GLOBALS['global']['tempDir'].$cacheName.'.txt';
-                    echo '"'.$modName.' ver: '.$yaml->YAMLArray['version'].'" -'.$cacheName.PHP_EOL;
+                    //echo '"'.$modName.' ver: '.$yaml->YAMLArray['version'].'" -'.$cacheName.PHP_EOL;
 
                     /** if cached file doesn't exist, make it **/                                    
                     if (!is_file($cacheFile))
@@ -131,8 +127,7 @@ class OXC {
     }
 
     /** Loads a save AND creates a modlist **/
-    public function loadSave($file, $path)
-    {
+    public function loadSave($file, $path) {
         $file = $path.$file;
         if (stripos($file, '.sav') === false)
         {
@@ -149,8 +144,7 @@ class OXC {
             }
         }
     }
-    public function saveAs($file, $path)
-    {
+    public function saveAs($file, $path) {
         /** Update the internal name **/
         $this->save->YAMLArray[0]['name'] = $file;
 
@@ -163,9 +157,8 @@ class OXC {
         $this->save->saveFile($file);
     }
 
-    private function loadMod($mod)
-    {
-        echo '"'.$mod.'" - '.md5($mod).PHP_EOL;
+    private function loadMod($mod) {
+        //echo '"'.$mod.'" - '.md5($mod).PHP_EOL;
         $fileName = $GLOBALS['global']['tempDir'].md5($mod).'.txt';
         if (!is_file($fileName))
         {
@@ -190,8 +183,7 @@ class OXC {
         }
     }
 
-    public function resupplyBases()
-    {
+    public function resupplyBases() {
         if (!isset($this->save->YAMLArray[1]))
         {
             $this->_errorHandler(__FUNCTION__, 'Save File Not loaded or improperly formatted');
@@ -352,8 +344,7 @@ class OXC {
     }
 
     /** Called by an array walk in loadMod **/
-    private function modLayering($item, $key, $category)
-    {
+    private function modLayering($item, $key, $category) {
         if (is_array($item) && array_key_exists('delete', $item))
         {
             unset($this->loadedMods[$category][$item['delete']]);
@@ -361,8 +352,7 @@ class OXC {
     }
 
     /** Calculates Available Storage Space **/
-    private function maxStorage($baseID)
-    {
+    private function maxStorage($baseID) {
         $baseArray = $this->save->YAMLArray[1]['bases'][$baseID];
 
         $space = 0;
@@ -378,8 +368,7 @@ class OXC {
     }
 
     /** Caluculates how much storage is used in a base **/
-    private function usedStorage($baseID, $includeTransfer = true)
-    {
+    private function usedStorage($baseID, $includeTransfer = true) {
         $usedStorage = 0;
 
         /** Pull out items in stores **/
@@ -404,7 +393,7 @@ class OXC {
         if ($includeTransfer)
         {
             $usedStorage += $this->activeTransfers($baseID, 'space');
-            print_r($this->activeTransfers($baseID, 'space').PHP_EOL);
+            //print_r($this->activeTransfers($baseID, 'space').PHP_EOL);
         }
 
         return $usedStorage;
@@ -417,8 +406,7 @@ class OXC {
      * @$type = two options 'space' returns how much space is needed for the items enroute, 
      *                      'items' returns an array of items enroute    
      */
-    private function activeTransfers($baseID, $type = 'space')
-    {
+    private function activeTransfers($baseID, $type = 'space') {
         
         $usedStorage = 0;
         $itemEnroute = array();
@@ -443,8 +431,7 @@ class OXC {
     }
 
     /** check if the base is capable of taking the order **/
-    private function canTransfer($type, $qty, $baseID)
-    {
+    private function canTransfer($type, $qty, $baseID) {
         /** Do not transfer items into bases without storage (I don't care about free space, only that I have have enough in the base to sell to make space. **/
         $usedSpace = $this->usedStorage($baseID, true);
         $needSpace = $this->loadedMods['items'][$type]['size'] * $qty;        
@@ -468,8 +455,7 @@ class OXC {
     }
 
     /** put an item in the transfer block, and charges for it **/
-    private function transferItem ($type, $qty, $baseID)
-    {
+    private function transferItem ($type, $qty, $baseID) {
         if (!$this->canTransfer($type, $qty, $baseID))
         {
             return false;
@@ -503,8 +489,7 @@ class OXC {
     }
 
     /** First tries to buy item, then if not possible, tries to manufacture - respects hidden entries **/
-    private function acquireItem($type, $qty, $baseID)
-    {
+    private function acquireItem($type, $qty, $baseID) {
         $return = $this->buyItem($type, $qty, $baseID);
         if ($return === false)
         {
@@ -513,8 +498,7 @@ class OXC {
         return $return;
     }
 
-    private function buyItem($type, $qty, $baseID)
-    {
+    private function buyItem($type, $qty, $baseID) {
         $return = true;
         /** see if item can be bought - respects hiddenPurchaseItems **/
         if (!isset($this->loadedMods['items'][$type]['cost']) || @$this->save->YAMLArray[1]['hiddenPurchaseItems'][$type] == true)
@@ -553,8 +537,7 @@ class OXC {
      **
      * Note: To prevent an entry from being manufactured - hide it via right clicking in oxce+
      */
-    private function produceItem ($type, $qty, $baseID)
-    {
+    private function produceItem ($type, $qty, $baseID) {
         /** See if item can be manufactured **/
         $return = false;
 
@@ -650,8 +633,7 @@ class OXC {
         return $return;
     }
 
-    private function activeProduction($type)
-    {
+    private function activeProduction($type) {
         $return = 0;
         foreach ($this->save->YAMLArray[1]['bases'] AS $base)
         {
@@ -671,8 +653,7 @@ class OXC {
 
     }
     /** reindexes mods so that they type is used as a key when available **/
-    private function createModArray($yaml, $name)
-    {
+    private function createModArray($yaml, $name) {
         /** first assumption - ruleset is coded properly **/
         if (is_int(key($yaml)))
         {
@@ -708,12 +689,15 @@ class OXC {
         }
     }
 
-    public function cloneSoldiers($reviveLimit = 0, $activeBases = 0)
-    {
+    public function cloneSoldiers($reviveLimit = 0, $activeBases = 0) {
         /** check arguments **/
-        if ($reviveLimit == 0 || !is_numeric($reviveLimit) || !is_numeric($activeBases) || is_null($this->loadedMods))
+        if (!is_numeric($reviveLimit) || !is_numeric($activeBases) || is_null($this->loadedMods))
         {        
             return 0;
+        }
+        if ($reviveLimit === 0)
+        {
+            $reviveLimit = 100;
         }
         $reviveLimit = (int) $reviveLimit;
 
@@ -755,7 +739,7 @@ class OXC {
                 'psiSkill' => 16,
                 'melee' => 70));
 
-        /** X-Com Files **/
+        /** X-Com Files **
         $newSoldier[] = array(
             'type' => 'STR_DOG',
             'costBuy' => 10000,
@@ -1023,20 +1007,6 @@ class OXC {
             {             
                 /** Initialize stats and armor **/
                 $soldier['armor'] =$this->loadedMods['soldiers'][$soldier['type']]['armor'];
-                /*
-                if ($soldier['type'] == 'STR_SOLDIER')
-                {
-                    $soldier['armor'] = 'STR_SUIT_UC';
-                }
-                else if ($soldier['type'] == 'STR_DOG')
-                {
-                    $soldier['armor'] = 'STR_DOGE_ARMOR';
-                }
-                else if ($soldier['type'] == 'STR_MUGGLE_AI' || $soldier['type'] == 'STR_ALIEN_AI')
-                {
-                    $soldier['armor'] = 'SMALL_TANK_ARMOR';
-                }
-                */
                 unset($soldier['death']);
 
                 /** Initialize other stats **/
@@ -1059,9 +1029,8 @@ class OXC {
                 
                 /** Generate New Officer / Clone **/                    
                 /** Use a new soldier, maintain diary **/
-                if (stripos($soldier['name'], '~') == false) /** Use a new soldier, maintain diary **/
-                { 
-                    /** TODO: Read Rulesets for stat limits **/
+                if (stripos($soldier['name'], '~') == false) { /** Use a new soldier, maintain diary **/ 
+                    
                     foreach ($soldier['currentStats'] AS $stat=>$value)
                     {
                         $newValue = rand($this->loadedMods['soldiers'][$soldier['type']]['minStats'][$stat], $this->loadedMods['soldiers'][$soldier['type']]['maxStats'][$stat]);
@@ -1076,8 +1045,7 @@ class OXC {
                         $soldier['initialStats'][$stat] = $soldier['currentStats'][$stat] = $newValue;
                     }
                 }
-                else /* Clone */
-                {
+                else { /* Clone */
                     echo "Disabled Clone section, you shouldn't see me \n";
                     /*
                     foreach ($soldier['currentStats'] AS $stat=>$value)
@@ -1139,6 +1107,10 @@ class OXC {
 
         /** Finally, Place soldiers where they are needed most! **/
         $ret = count($soldierRelocation);
+        if ($ret > 0)
+        {
+            $ret = array();
+        }
         foreach ($soldierRelocation AS $key => $soldier)
         {
             /* find out if PSI rod or not */
@@ -1153,14 +1125,13 @@ class OXC {
             $this->save->YAMLArray[1]['bases'][$index]['soldiers'][] = $soldier;
             unset($soldierRelocation[$key]);
 
-            echo "<b>".$soldier['name']."</b> has been relocated to: ".$this->save->YAMLArray[1]['bases'][$index]['name'].PHP_EOL;
+            $ret[] = $soldier['name'].' => '.$this->save->YAMLArray[1]['bases'][$index]['name'];
         }
 
         return $ret;
     }
 
-    private function alterFunds($cost)
-    {
+    private function alterFunds($cost) {
         $funds = end($this->save->YAMLArray[1]['funds']);
         $index = key($this->save->YAMLArray[1]['funds']);
 

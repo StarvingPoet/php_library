@@ -37,9 +37,10 @@ class YAML {
                                                                                       'true' => array($this, 'yaml_tag_callback')));
             }
             else
-            {
+            {                
                 $this->fileArray = explode(PHP_EOL, file_get_contents($this->fileName));
-                $this->YAMLArray = $this->YAMLtoArray();
+                $this->YAMLArray = $this->YAMLtoArray();                
+                trigger_error('Running without the YAML Extension loaded is deprecated', E_USER_WARNING);
             }
         }
 
@@ -311,13 +312,21 @@ class YAML {
      */
     public function saveFile($file = NULL)
     {
-        if (extension_loaded(yaml))
+        if (extension_loaded('yaml'))
         {
             if (is_numeric(key($this->YAMLArray))) /** this assumes the yaml parser loaded multiple files **/
             {
                 foreach ($this->YAMLArray AS $array)
                 {
-                    ksort($array);
+                    if (!is_array($array))
+                    {
+                        echo PHP_EOL.'YAMLArray';
+                        print_r($array);
+                    }
+                    else
+                    {
+                        ksort($array);
+                    }
                     $string .= $this->ArraytoYAML($array);
                     $string .= PHP_EOL."---".PHP_EOL;
                 }
