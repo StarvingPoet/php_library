@@ -24,20 +24,17 @@ class Base
     public function isConnected()     { return $this->is_connected; }
     public function getFragmentSize() { return $this->options['fragment_size']; }
 
-    public function setTimeout($timeout)
-    {
+    public function setTimeout($timeout) {
         $this->options['timeout'] = $timeout;
         if ($this->socket && get_resource_type($this->socket) === 'stream') {
           stream_set_timeout($this->socket, $timeout);
         }
     }
-    public function setFragmentSize($fragment_size)
-    {
+    public function setFragmentSize($fragment_size) {
         $this->options['fragment_size'] = $fragment_size;
         return $this;
     }
-    public function send($payload, $opcode = 'text', $masked = true)
-    {
+    public function send($payload, $opcode = 'text', $masked = true) {
         if (!$this->is_connected) $this->connect(); /// @todo This is a client function, fixme!
         if ($opcode == 'hybil10')
         {           
@@ -68,8 +65,7 @@ class Base
             }
         }
     }
-    protected function send_fragment($final, $payload, $opcode, $masked)
-    {
+    protected function send_fragment($final, $payload, $opcode, $masked) {
         // Binary string for header.
         $frame_head_binstr = '';
         // Write FIN, final fragment bit.
@@ -113,8 +109,7 @@ class Base
     /**
      * This allows for more complex data structures to be sent
      */
-    private function hybi10Encode($payload, $type = 'text', $masked = true)
-    {       
+    private function hybi10Encode($payload, $type = 'text', $masked = true) {       
         $frameHead = array();
         $frame = '';
         $payloadLength = strlen($payload);
@@ -179,8 +174,7 @@ class Base
 
     }
 
-    public function receive()
-    {
+    public function receive() {
         if (!$this->is_connected)
         {
             $this->connect(); /// @todo This is a client function, fixme!
@@ -189,20 +183,19 @@ class Base
 
         $response = null;
 
-        //while (is_null($response))
-        //{
+        while (is_null($response))
+        {
+            echo'.';
             $response = $this->receive_fragment();
-        //}
+        }
         return $response;
     }
 
-    protected function receive_fragment()
-    {
+    protected function receive_fragment() {
         // Just read the main fragment information first.
         $data = $this->read(2);
 
-        if ($data === PHP_EOL)
-        {
+        if ($data === PHP_EOL) {
 
         }
 
@@ -216,15 +209,13 @@ class Base
         // Parse opcode
         $opcode_int = ord($data[0]) & 31; // Bits 4-7
         $opcode_ints = array_flip(self::$opcodes);
-        if (!array_key_exists($opcode_int, $opcode_ints))
-        {
+        if (!array_key_exists($opcode_int, $opcode_ints)) {
             throw new ConnectionException("Bad opcode in websocket frame: $opcode_int");
         }
         $opcode = $opcode_ints[$opcode_int];
 
         // record the opcode if we are not receiving a continutation fragment
-        if ($opcode !== 'continuation')
-        {
+        if ($opcode !== 'continuation') {
             $this->last_opcode = $opcode;
         }
 
@@ -234,8 +225,7 @@ class Base
 
         // Payload length
         $payload_length = (integer) ord($data[1]) & 127; // Bits 1-7 in byte 1
-        if ($payload_length > 125)
-        {
+        if ($payload_length > 125) {
             if ($payload_length === 126) $data = $this->read(2); // 126: Payload is a 16-bit unsigned int
             else                         $data = $this->read(8); // 127: Payload is a 64-bit unsigned int
             $payload_length = bindec(self::sprintB($data));
@@ -245,24 +235,20 @@ class Base
         if ($mask) $masking_key = $this->read(4);
 
         // Get the actual payload, if any (might not be for e.g. close frames.
-        if ($payload_length > 0)
-        {
-          $data = $this->read($payload_length);
-          if ($mask)
-          {
-              // Unmask payload.
-              for ($i = 0; $i < $payload_length; $i++)
-              {
+        if ($payload_length > 0) {
+            $data = $this->read($payload_length);
+            if ($mask) {
+                // Unmask payload.
+                for ($i = 0; $i < $payload_length; $i++)
+                {
                   $payload .= ($data[$i] ^ $masking_key[$i % 4]);
-              }
-          }
-          else $payload = $data;
+                }
+            }
+            else $payload = $data;
         }
-        if ($opcode === 'close')
-        {
+        if ($opcode === 'close') {
             // Get the close status.
-            if ($payload_length >= 2)
-            {
+            if ($payload_length >= 2) {
                 $status_bin         = $payload[0] . $payload[1];
                 $status             = bindec(sprintf("%08b%08b", ord($payload[0]), ord($payload[1])));
                 $this->close_status = $status;
@@ -272,8 +258,7 @@ class Base
                     $this->send($status_bin . 'Close acknowledged: ' . $status, 'close', true); // Respond.
                 }
             }
-            if ($this->is_closing)
-            {
+            if ($this->is_closing) {
                 $this->is_closing = false; // A close response, all done.
             }
             // And close the socket.
@@ -281,14 +266,12 @@ class Base
             $this->is_connected = false;
         }
         // if this is not the last fragment, then we need to save the payload
-        if (!$final)
-        {
+        if (!$final) {
             $this->huge_payload .= $payload;
             return null;
         }
         // this is the last fragment, and we are processing a huge_payload
-        else if ($this->huge_payload)
-        {
+        else if ($this->huge_payload) {
             // sp we need to retreive the whole payload
             $payload = $this->huge_payload .= $payload;
             $this->huge_payload = null;
@@ -296,12 +279,11 @@ class Base
         return $payload;
     }
 
-    public function listen()
-    {
+    public function listen() {
         $read   = array($this->socket);
         $write  = null;
         $except = null;
-        $poll = stream_select($read, $write, $except, 0);
+        $poll = stream_select($read, $write, $except, 0, 200000);
 
         return $poll;
     }
@@ -328,8 +310,19 @@ class Base
         //$written = fwrite($this->socket, $data); 
         /** Moved from fwrite to stream_socket_sendto because fwrite was taking 30+ seconds per MB **/
         
+        //print_r($data).PHP_EOL;
+       
+        $read  = null;
+        $write = array($this->socket);
+        $except = array($this->socket);
+        
+        
+        /** temp sleep if needed **/
+        stream_select($read, $write, $except, 1);                
+                
         $i=0;
         for ($written = 0; $written < strlen($data); $written += $fwrite) {
+            
             $fwrite = @stream_socket_sendto($this->socket, $data);
             $i++;
             
@@ -340,8 +333,7 @@ class Base
             {
                 echo "Stream Blocked, will try later.".PHP_EOL;
             }
-        }
-        fflush($this->socket);
+        }       
         return $written;
     }
 
@@ -350,8 +342,8 @@ class Base
         $data = '';
         while (strlen($data) < $length)
         {
-            $buffer = fread($this->socket, $length - strlen($data));
-            //$buffer = stream_socket_recvfrom($this->socket, $length - strlen($data));            
+            //$buffer = fread($this->socket, $length - strlen($data));
+            $buffer = stream_socket_recvfrom($this->socket, $length - strlen($data));            
             if ($buffer === false)
             {
                 $metadata = stream_get_meta_data($this->socket);
@@ -359,13 +351,14 @@ class Base
                     'Broken frame, read '.strlen($data).' of stated '. $length . ' bytes.  Stream state: '. json_encode($metadata)
                 );
             }
+            /*
             if ($buffer === '')
             {
                 $metadata = stream_get_meta_data($this->socket);
                 throw new ConnectionException(
                     'Empty read; connection dead?  Stream state: ' . json_encode($metadata)
                 );
-            }
+            }*/
             $data .= $buffer;
         }
         fflush($this->socket);

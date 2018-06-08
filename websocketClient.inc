@@ -12,8 +12,7 @@ class Client extends Base
     *   - timeout:      Set the socket timeout in seconds.  Default: 5
     *   - headers:      Associative array of headers to set/override.
     */
-    public function __construct($uri, $options = array())
-    {
+    public function __construct($uri, $options = array()) {
         $this->options = $options;
         if (!array_key_exists('timeout', $this->options))
         {
@@ -22,7 +21,7 @@ class Client extends Base
         // the fragment size
         if (!array_key_exists('fragment_size', $this->options))
         {
-            $this->options['fragment_size'] = 65536;
+            $this->options['fragment_size'] = 16384;
         }
         $this->socket_uri = $uri;
     }
@@ -33,6 +32,7 @@ class Client extends Base
       $this->socket = null;
     }
     }
+    
     /**
     * Perform WebSocket handshake
     */
@@ -134,16 +134,17 @@ class Client extends Base
         }
         $this->is_connected = true;
     }
+    
     /**
     * Generate a random string for WebSocket key.
     * @return string Random string
     */
     protected static function generateKey() {
-    $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!"$&/()=[]{}0123456789';
-    $key = '';
-    $chars_length = strlen($chars);
-    for ($i = 0; $i < 16; $i++) $key .= $chars[mt_rand(0, $chars_length-1)];
-    return base64_encode($key);
+        $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!"$&/()=[]{}0123456789';
+        $key = '';
+        $chars_length = strlen($chars);
+        for ($i = 0; $i < 16; $i++) $key .= $chars[mt_rand(0, $chars_length-1)];
+        return base64_encode($key);
     }
 }
 ?>
