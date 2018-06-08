@@ -79,7 +79,7 @@ class MyDirectory {
 	/*********************************************************************
     Sets Contents to be an array of Contents($Paths)
 	**********************************************************************/
-	function MyDirectory($Path, $recurse = true)
+	function __construct($Path, $recurse = true)
 	{
 		$this->Path = $Path;
 		$this->Contents = $this->Contents($Path, $recurse);

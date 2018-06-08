@@ -39,7 +39,7 @@ class fileUpload {
     var $chart     = '';
     var $finalPath = '';
 
-    function fileUpload($key, $chart, $path, $name)
+    function __construct($key, $chart, $path, $name)
     {
         $this->Akey   = $key;
         $this->path  = $path;

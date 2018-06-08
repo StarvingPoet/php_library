@@ -21,8 +21,7 @@ foreach ($library->Contents as $File)
          && ($File["fullPath"] != "library/global.inc")
          && ($File["fullPath"] != "library/classMyDirectory.inc")
 		 && ($File["type"] == "File")                   /** File Type Filter **/
-  		 && ($File["ext"] != "htc")               /** Extension Type Filter **/
-  		 && ($File["ext"] != "txt")               /** Extension Type Filter **/
+  		 && ($File["ext"] == "inc")               /** Extension Type Filter **/  		 
        )
 	{
 		include_once($File["fullPath"]);
