@@ -877,8 +877,7 @@ class OXC {
         }
         
         /** return if no newly dead **/
-        if (count($newlyDead) < 1)
-        {
+        if (count($newlyDead) < 1) {
             return 0;
         }
 
@@ -890,8 +889,7 @@ class OXC {
         $soldierPsiStrMid    = array();
         $soldierRelocation   = array();  //Container for soldiers needing a new home
 
-        foreach($this->save->YAMLArray[1]['bases'] AS $baseID => $base)
-        {
+        foreach($this->save->YAMLArray[1]['bases'] AS $baseID => $base) {
             if (is_array($base['soldiers']))
             {
                 foreach ($base['soldiers'] AS $soldierID => $soldierCheck)
@@ -947,11 +945,10 @@ class OXC {
         }
 
         ksort($soldierBaseBalance, SORT_NATURAL);
-        print_r($soldierBaseBalance);
+        //print_r($soldierBaseBalance);
 
         /** BRAAAAAIIIINNNNSSSS **/
-        foreach($newlyDead as $key=>$name)
-        {
+        foreach($newlyDead as $key=>$name) {
             $total   = 0;
             $living  = false;
             $soldier = array();
@@ -1107,12 +1104,10 @@ class OXC {
 
         /** Finally, Place soldiers where they are needed most! **/
         $ret = count($soldierRelocation);
-        if ($ret > 0)
-        {
+        if ($ret > 0) {
             $ret = array();
         }
-        foreach ($soldierRelocation AS $key => $soldier)
-        {
+        foreach ($soldierRelocation AS $key => $soldier) {
             /* find out if PSI rod or not */
             $search_type = $soldier['type'];
             if ($soldier['currentStats']['psiStrength'] < $soldierPsiStrMid[$soldier['type']])

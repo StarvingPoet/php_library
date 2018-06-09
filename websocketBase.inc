@@ -184,8 +184,7 @@ class Base
         $response = null;
 
         while (is_null($response))
-        {
-            echo'.';
+        {            
             $response = $this->receive_fragment();
         }
         return $response;

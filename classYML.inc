@@ -318,13 +318,7 @@ class YAML {
             {
                 foreach ($this->YAMLArray AS $array)
                 {
-                    if (!is_array($array))
-                    {
-                        echo PHP_EOL.'YAMLArray';
-                        print_r($array);
-                    }
-                    else
-                    {
+                    if (is_array($array)) {                    
                         ksort($array);
                     }
                     $string .= $this->ArraytoYAML($array);
