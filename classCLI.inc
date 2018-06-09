@@ -88,6 +88,7 @@ class CLI {
     function cloutf($echo)
     {
         fwrite($this->stdout, sprintf("\r%-79.79s", $echo));
+        @ob_flush();
     }
 
     /**
@@ -147,6 +148,7 @@ class CLI {
      */
     function cls()
     {
+        return false;
         fwrite($this->stdout, chr(27).chr(91).'H'.chr(27).chr(91).'J');
 
         /* work back up cleaning every line as you go, do a few extra to make sure*/
@@ -283,6 +285,7 @@ class CLI {
         $this->clout(str_repeat("*", $length)."\n");
         $this->clout($error."\n");
         $this->clout(str_repeat("*", $length)."\n");
+        @ob_flush();
     }
 
     /**

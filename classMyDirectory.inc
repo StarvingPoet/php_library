@@ -54,11 +54,12 @@ class MyDirectory {
 
 	Called By: Self, MyDirectory()
 	**********************************************************************/
-	function Contents($Path, $recurse)
+	function oldContents($Path, $recurse)
 	{
 		$result = array();
-		$dh = opendir("$Path");
-		while (($FileName = readdir($dh)) !== false)
+		//$dh = opendir("$Path");
+		
+        while (($FileName = readdir($dh)) !== false)
 		{
 			if (($FileName == '.') || ($FileName == '..'))
 			{
@@ -75,6 +76,27 @@ class MyDirectory {
 		sort($result);
 		return $result;
 	}
+    
+    public function Contents($path, $recurse)
+    {
+        $result = array();
+        $list = scandir($path);
+        
+        foreach ($list as $key=>$fileName) {
+            if (($fileName == '.') || ($fileName == '..'))
+            {
+                continue;
+            }
+            $filePath = $path."/".$fileName;
+            $result[] = $this->File($filePath);
+            if (is_dir($filePath) && $recurse === true)
+            {
+                $result = array_merge($result,$this->Contents($filePath, $recurse));
+            }
+            }		
+		sort($result);
+		return $result;    
+    }
 
 	/*********************************************************************
     Sets Contents to be an array of Contents($Paths)

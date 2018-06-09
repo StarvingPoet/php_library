@@ -299,8 +299,7 @@ class YAML {
             $string = str_replace('- --', '---', $string);
             $string = str_replace('- {}', '{}', $string);
 			$string = preg_replace('/-{3,}/', '---', $string);
-        }
-
+        }                
         return $string;
     }
 
