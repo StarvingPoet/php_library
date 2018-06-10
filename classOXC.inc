@@ -144,12 +144,13 @@ class OXC {
             }
         }
     }
-    public function saveAs($file, $path) {
+    /** Creates a new save, using $file as the internal game name **/
+    public function saveAs($name, $path) {
         /** Update the internal name **/
-        $this->save->YAMLArray[0]['name'] = $file;
+        $this->save->YAMLArray[0]['name'] = $name;
 
         /** write file **/
-        $file = $path.$file;
+        $file = $path.$name;
         if (stripos($file, '.sav') === false)
         {
             $file .= '.sav';
@@ -157,6 +158,7 @@ class OXC {
         $this->save->saveFile($file);
     }
 
+    /** TODO - Move all this to a temp database.  Mod sizes are getting too big. **/
     private function loadMod($mod) {
         //echo '"'.$mod.'" - '.md5($mod).PHP_EOL;
         $fileName = $GLOBALS['global']['tempDir'].md5($mod).'.txt';
@@ -183,13 +185,13 @@ class OXC {
         }
     }
 
-    public function resupplyBases() {
-        if (!isset($this->save->YAMLArray[1]))
-        {
+    public function resupplyBases($template = 0) {
+        if (!isset($this->save->YAMLArray[1])) {
             $this->_errorHandler(__FUNCTION__, 'Save File Not loaded or improperly formatted');
         }
-        for ($i = 0; $i< 10; $i++)
-        {
+        
+        /*        
+        for ($i = 0; $i< 10; $i++) {
             $name = 'globalCraftLoadout';
             $key  = $name.'Name'.$i;
             if ($this->save->YAMLArray[1][$key] == 'Base Resupply')
@@ -201,17 +203,25 @@ class OXC {
                 $key2 = $name.$i;
             }
         }
+        
 
-        if (!isset($this->save->YAMLArray[1][$key1]))
-        {
+        if (!isset($this->save->YAMLArray[1][$key1])) {
             $this->save->YAMLArray[1][$key1] = array();
         }
-        if (!isset($this->save->YAMLArray[1][$key2]))
-        {
+        if (!isset($this->save->YAMLArray[1][$key2])) {
             $this->save->YAMLArray[1][$key2] = array();
-        }
+        }        
 
         $resupply = array_merge($this->save->YAMLArray[1][$key1], $this->save->YAMLArray[1][$key2]);
+        */
+        
+        $key = 'globalCraftLoadout'.$template;
+        if (!isset($this->save->YAMLArray[1][$key]))
+        {
+            $this->save->YAMLArray[1][$key] = array();            
+        }
+        
+        $resupply = $this->save->YAMLArray[1][$key];
 
         /** I'm going to iterate through the bases a couple times:
          *  Step 1: Figure out who needs what, and if we have extras, put extras in escrow
@@ -400,8 +410,7 @@ class OXC {
         
     }
 
-    /** 
-     * Returns the activeTransfer TO a base.
+    /**  Returns the activeTransfer TO a base.     
      *
      * @$type = two options 'space' returns how much space is needed for the items enroute, 
      *                      'items' returns an array of items enroute    
@@ -455,7 +464,7 @@ class OXC {
     }
 
     /** put an item in the transfer block, and charges for it **/
-    private function transferItem ($type, $qty, $baseID) {
+    private function transferItem ($type, $qty, $baseID, $charge = true) {
         if (!$this->canTransfer($type, $qty, $baseID))
         {
             return false;
@@ -463,17 +472,15 @@ class OXC {
 
 
         /** Create the Transfer array if empty **/
-        if (!isset($this->save->YAMLArray[1]['bases'][$baseID]['transfers']))
-        {
+        if (!isset($this->save->YAMLArray[1]['bases'][$baseID]['transfers'])) {
             $this->save->YAMLArray[1]['bases'][$baseID]['transfers'] = array();
         }
 
-        if (!isset($this->loadedMods['items'][$type]['transferTime']))
-        {
+        /** If for some reason an item doesn't have a transfer time, give it 24 hours **/
+        if (!isset($this->loadedMods['items'][$type]['transferTime'])) {
             $time = 24;
         }
-        else
-        {
+        else {
             $time = $this->loadedMods['items'][$type]['transferTime'];
         }
 
@@ -482,8 +489,11 @@ class OXC {
                        'itemQty' => $qty);
         $this->save->YAMLArray[1]['bases'][$baseID]['transfers'][] = $array;
 
-        $fee = -1 * abs(50 * $qty);
-        $this->alterFunds($fee);
+        /** don't charge transfer fees for purchases **/
+        if ($charge === true) {
+            $fee = -1 * abs(50 * $qty);
+            $this->alterFunds($fee);
+        }
 
         return true;
     }
@@ -498,20 +508,17 @@ class OXC {
         return $return;
     }
 
-    private function buyItem($type, $qty, $baseID) {
+    private function buyItem($type, $qty, $baseID) { 
         $return = true;
         /** see if item can be bought - respects hiddenPurchaseItems **/
-        if (!isset($this->loadedMods['items'][$type]['cost']) || @$this->save->YAMLArray[1]['hiddenPurchaseItems'][$type] == true)
-        {
+        if (!isset($this->loadedMods['items'][$type]['cost']) || @$this->save->YAMLArray[1]['hiddenPurchaseItems'][$type] == true) {
             //print_r("Unable to Buy ".$type.PHP_EOL);
             return false;;
         }
-        else if (is_array($this->loadedMods['items'][$type]['requiresBuy']))
-        {
-            foreach ($this->loadedMods['items'][$type]['requiresBuy'] AS $check)
-            {
-                if (array_search($check, $this->save->YAMLArray[1]['discovered']) === false)
-                {
+        /** see if item is researched **/
+        else if (is_array($this->loadedMods['items'][$type]['requiresBuy'])) { 
+            foreach ($this->loadedMods['items'][$type]['requiresBuy'] AS $check) {
+                if (array_search($check, $this->save->YAMLArray[1]['discovered']) === false) {
                     //print_r('NOT RESEARCHED (BUY)');
                     return false;
                 }
@@ -519,10 +526,9 @@ class OXC {
         }
 
 
-        $return = $this->transferItem($type, $qty, $baseID);
+        $return = $this->transferItem($type, $qty, $baseID, false);
 
-        if ($return)
-        {            
+        if ($return) {            
             $cost = -1 * abs($needed * $this->loadedMods['items'][$item]['costBuy']);
             $this->alterFunds($cost);        
         }
