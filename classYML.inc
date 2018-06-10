@@ -34,7 +34,12 @@ class YAML {
             if (extension_loaded('yaml'))
             {
                 $this->YAMLArray = yaml_parse_file($this->fileName, $pos, $ndocs, array(YAML_BOOL_TAG => array($this, 'yaml_tag_callback'),
-                                                                                      'true' => array($this, 'yaml_tag_callback')));
+                                                                                      'true' => array($this, 'yaml_tag_callback')                                                                                      
+                                                                                      ));
+                                                                                      
+                foreach($this->YAMLArray[1]['missionStatistics'] as $x) {
+                    var_dump($x['success']);
+                }
             }
             else
             {                
@@ -73,7 +78,7 @@ class YAML {
     }
 
     /**
-     * This is a fix so that y: scalars don't get interpretad as true:
+     * This is a fix so that y: scalars don't get interpretad as true, in addition, all other bools are properly typecasted
      */
     private function yaml_tag_callback($value, $tag, $flags)
     {
@@ -81,10 +86,14 @@ class YAML {
         {
             return '"y"';
         }
-        else if ($value == 'STR_AKSU74')
+        else if (is_numeric($value))
         {
-            var_dump(func_get_args());
-
+            return filter_var($value, FILTER_VALIDATE_INT);
+        }    
+        else /**convert to bool, convert back to string **/
+        {
+            $bool = filter_var($value, FILTER_VALIDATE_BOOLEAN);
+            return ($bool) ? 'true' : 'false';
         }
         return;
     }

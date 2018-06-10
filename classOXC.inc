@@ -520,6 +520,14 @@ class OXC {
      * Note: To prevent an entry from being manufactured - hide it via right clicking in oxce+
      */
     private function produceItem ($type, $qty, $baseID) {
+        if ($qty < 0)
+        {
+            echo PHP_EOL.$type.' is negative ('.$qty.')'.PHP_EOL;
+        }
+        if ($type == 'STR_ALIEN_ALLOYS')
+        {
+            print_r($qty.PHP_EOL);
+        }
         /** See if item can be manufactured **/
         $return = false;
 
@@ -528,7 +536,7 @@ class OXC {
         {
             $return = true;
             $name = $type;
-            if (isset($this->loadedMods['manufacture'][$type]['producedItems']))
+            if (isset($this->loadedMods['manufacture'][$type]['producedItems'])) /** Divide the needed quantity by the multiplier for those things that produce in bulk **/
             {
                 $qty = $qty / $this->loadedMods['manufacture'][$type]['producedItems'][$type];
             }
@@ -568,28 +576,29 @@ class OXC {
             }
         }
 
-        if ($return)
-        {
+        if ($return) { /** we can produce this item **/
             /** See if Array Exists **/
-            if (!isset($this->save->YAMLArray[1]['bases'][$baseID]['productions']))
-            {
+            if (!isset($this->save->YAMLArray[1]['bases'][$baseID]['productions'])) {
                 $this->save->YAMLArray[1]['bases'][$baseID]['productions'] = array();
             }
 
             /** see if this production exists **/
             $found = false;
-            foreach ($this->save->YAMLArray[1]['bases'][$baseID]['productions'] AS $key=>$row)
-            {
+            foreach ($this->save->YAMLArray[1]['bases'][$baseID]['productions'] AS $key=>$row) {
                 if ($row['item'] == $name)
                 {
                     $this->save->YAMLArray[1]['bases'][$baseID]['productions'][$key]['amount'] += $qty;
+                    $this->save->YAMLArray[1]['bases'][$baseID]['productions'][$key]['amount'] = max($this->save->YAMLArray[1]['bases'][$baseID]['productions'][$key]['amount'], 0);
+                    if (isset($this->save->YAMLArray[1]['bases'][$baseID]['productions'][$key]['sell'])) {
+                        unset($this->save->YAMLArray[1]['bases'][$baseID]['productions'][$key]['sell']);
+                    }
+                    $this->save->YAMLArray[1]['bases'][$baseID]['productions'][$key]['infinite'] = 'false';                    
                     $found = true;
                     break;
                 }
             }
 
-            if ($found === false)
-            {
+            if ($found === false) { // create new item
                 $array = array( 'assigned' => 0,
                                 'spent' => 0,
                                 'item' => $name,
@@ -598,8 +607,8 @@ class OXC {
                 $this->save->YAMLArray[1]['bases'][$baseID]['productions'][] = $array;
             }
 
-            /** Might as well check for subItems, if we can't get them, we don't care **/
-            if (isset($this->loadedMods['manufacture'][$name]['requiredItems']))
+            /** Might as well check for subItems, if we can't get them, we don't care, but skip if qty is negative **/
+            if (isset($this->loadedMods['manufacture'][$name]['requiredItems']) && $qty > 0)
             {
                 foreach ($this->loadedMods['manufacture'][$name]['requiredItems'] AS $requiredItem => $requiredQty)
                 {
@@ -615,6 +624,7 @@ class OXC {
         return $return;
     }
 
+    /** Returns the quantity of item type being produced in a base **/
     private function activeProduction($type) {
         $return = 0;
         foreach ($this->save->YAMLArray[1]['bases'] AS $base)
@@ -626,7 +636,12 @@ class OXC {
                     if ($production['item'] == $type)
                     {
                         $built = floor($production['spent'] / $this->loadedMods['manufacture'][$type]['time']);
-                        $return += $production['amount'] - $built;
+                                           
+                        if ($production['sell'] != true)
+                        {
+                            $return += $production['amount'] - $built;
+                        }
+                        
                     }
                 }
             }

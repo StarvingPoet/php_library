@@ -89,4 +89,9 @@ function http_parse_headers( $header )
     }
     return $retVal;
 }
+
+function dump($data)
+{
+    file_put_contents($GLOBALS['global']['tempDir'].'dump.txt', $data, FILE_APPEND);
+}
 ?>
