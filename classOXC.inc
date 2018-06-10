@@ -190,31 +190,6 @@ class OXC {
             $this->_errorHandler(__FUNCTION__, 'Save File Not loaded or improperly formatted');
         }
         
-        /*        
-        for ($i = 0; $i< 10; $i++) {
-            $name = 'globalCraftLoadout';
-            $key  = $name.'Name'.$i;
-            if ($this->save->YAMLArray[1][$key] == 'Base Resupply')
-            {
-                $key1 = $name.$i;
-            }
-            else if ($this->save->YAMLArray[1][$key] == 'Armor Resupply')
-            {
-                $key2 = $name.$i;
-            }
-        }
-        
-
-        if (!isset($this->save->YAMLArray[1][$key1])) {
-            $this->save->YAMLArray[1][$key1] = array();
-        }
-        if (!isset($this->save->YAMLArray[1][$key2])) {
-            $this->save->YAMLArray[1][$key2] = array();
-        }        
-
-        $resupply = array_merge($this->save->YAMLArray[1][$key1], $this->save->YAMLArray[1][$key2]);
-        */
-        
         $key = 'globalCraftLoadout'.$template;
         if (!isset($this->save->YAMLArray[1][$key]))
         {
@@ -224,7 +199,7 @@ class OXC {
         $resupply = $this->save->YAMLArray[1][$key];
 
         /** I'm going to iterate through the bases a couple times:
-         *  Step 1: Figure out who needs what, and if we have extras, put extras in escrow
+         *  Step 1: Figure out who needs what, and if we have extras, put extras in escrow 
          *  Step 2: Distribute Extras, buy items or queue manufacturing.
          *  step 3: Distribute Extra Extras
          *  step 4: Make Manufacture TODO
@@ -236,21 +211,18 @@ class OXC {
         $storageFull      = array();
 
         /** Step 1 **/
-        foreach ($resupply as $item => $qty)
-        {
+        foreach ($resupply as $item => $qty) {
             /* First see how much each base needs **/
             foreach ($this->save->YAMLArray[1]['bases'] AS $baseID => $baseArray)
             {
                 $enroute = $this->activeTransfers($baseID, 'items');
                 /** Pull out the item transfers first, but cap at 0 - otherwise we will wind up cloning items **/
-                if (isset($enroute[$item]))
-                {
+                if (isset($enroute[$item])) {
                     $qty =  max(($qty - $enroute[$item]), 0);
                 }
                 /** if needArray is negative, that means the base has extra and the items will be put into... escrow **/
                 $needArray[$baseID][$item] = $qty - $baseArray['items'][$item];
-                if ($needArray[$baseID][$item] < 0)
-                {
+                if ($needArray[$baseID][$item] < 0) {
                     $floatArray[$item] += ( $needArray[$baseID][$item]* -1);
                     $this->save->YAMLArray[1]['bases'][$baseID]['items'][$item] += $needArray[$baseID][$item];
                     $needArray[$baseID][$item] = 0;
@@ -259,41 +231,30 @@ class OXC {
         }
 
         /** Step 2 **/
-        foreach ($needArray as $baseID => $needs)
-        {
-            foreach ($needs as $item => $qty)
-            {
+        foreach ($needArray as $baseID => $needs) {
+            foreach ($needs as $item => $qty) {
                 /** We have the item in escrow **/
-                if ($floatArray[$item] >= $qty)
-                {
+                if ($floatArray[$item] >= $qty) {
                     $floatArray[$item] -= $qty;
                 }
-                else
-                {
+                else {
                     $needed = $qty - $floatArray[$item];
                     /** First see if it has to be found / manufactured **/
-                    if (!isset($this->loadedMods['items'][$item]['costBuy']) || $this->loadedMods['items'][$item]['costBuy'] < 1)
-                    {
+                    if (!isset($this->loadedMods['items'][$item]['costBuy']) || $this->loadedMods['items'][$item]['costBuy'] < 1) {
                         $cantBuyArray[$item] += $needed;
                         $qty = $floatArray[$item];
                         $floatArray[$item] = 0;
                     }
-                    else
-                    {
+                    else {
                         $cost = -1 * abs($needed * $this->loadedMods['items'][$item]['costBuy']);
                         $this->alterFunds($cost);
-                    }
-
-                    
+                    }                    
                 }
-
-                if ($qty > 0)
-                {
+                if ($qty > 0) {
                     $sent = $this->transferItem($item, $qty, $baseID);
 
                     /** if we can't transfer, put the item back in escrow **/
-                    if ($sent === false)
-                    {
+                    if ($sent === false) {
                         $floatArray[$item] += $qty;
                     }
                 }
@@ -301,8 +262,7 @@ class OXC {
         }
         
         /** Step 3 **/
-        foreach ($floatArray AS $item => $qty)
-        {
+        foreach ($floatArray AS $item => $qty) {
             $divisor = 0;
             $canTransfer = array();
             foreach ($this->save->YAMLArray[1]['bases'] AS $id => $base)
@@ -314,9 +274,8 @@ class OXC {
                 }
             }
 
-            /** excess items are lost in the nether! **/
-            if ($divisor === 0)
-            {
+            /** excess items are lost in the nether - the price we pay! **/
+            if ($divisor === 0) {
                 continue;
             }
 
@@ -344,13 +303,32 @@ class OXC {
         }
 
         /** Step 4 **/
-        foreach ($cantBuyArray AS $item => $qty)
-        {
+        $base = $this->findManufacturingBase();                
+        foreach ($cantBuyArray AS $item => $qty) {
+            /** We will always place the manufacturing in the base with the most engineering capacity **/
+            
             /** First see if anyone is making this item, subtract from qty **/
             $check = 0;
             $check = $this->activeProduction($item);
-            $this->produceItem($item, $qty-$check, 2);
+            $this->produceItem($item, $qty-$check, $base);
         }
+    }
+    
+    /** Returns the base ID with the most total manufacturing space **/
+    private function findManufacturingBase() {               
+        $space = array();
+        foreach ($this->save->YAMLArray[1]['bases'] as $id => $base) {
+            $space[$id] = 0;
+            foreach ($base['facilities'] as $facility) {
+                if (isset($this->loadedMods['facilities'][$facility['type']]['workshops']))
+                {
+                    $space[$id] += $this->loadedMods['facilities'][$facility['type']]['workshops'];
+                }
+            }
+        }
+        
+        $max = max($space);
+        return array_search($max, $space);
     }
 
     /** Called by an array walk in loadMod **/
@@ -465,12 +443,10 @@ class OXC {
 
     /** put an item in the transfer block, and charges for it **/
     private function transferItem ($type, $qty, $baseID, $charge = true) {
-        if (!$this->canTransfer($type, $qty, $baseID))
-        {
+        if (!$this->canTransfer($type, $qty, $baseID)) {
             return false;
         }
-
-
+        
         /** Create the Transfer array if empty **/
         if (!isset($this->save->YAMLArray[1]['bases'][$baseID]['transfers'])) {
             $this->save->YAMLArray[1]['bases'][$baseID]['transfers'] = array();
