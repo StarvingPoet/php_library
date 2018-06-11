@@ -97,8 +97,7 @@ class OXC {
                     }
                     $cacheName = md5($modName.' ver: '.$yaml->YAMLArray['version']);
                     $cacheFile = $GLOBALS['global']['tempDir'].$cacheName.'.txt';
-                    //echo '"'.$modName.' ver: '.$yaml->YAMLArray['version'].'" -'.$cacheName.PHP_EOL;
-
+                    
                     /** if cached file doesn't exist, make it **/                                    
                     if (!is_file($cacheFile))
                     {
@@ -159,8 +158,7 @@ class OXC {
     }
 
     /** TODO - Move all this to a temp database.  Mod sizes are getting too big. **/
-    private function loadMod($mod) {
-        //echo '"'.$mod.'" - '.md5($mod).PHP_EOL;
+    private function loadMod($mod) {        
         $fileName = $GLOBALS['global']['tempDir'].md5($mod).'.txt';
         if (!is_file($fileName))
         {
@@ -285,7 +283,7 @@ class OXC {
             {
                 $newQty = $dist;
 
-                /** I'm just going to assume the first base will always be able to hold a couple more **/
+                /** I'm just going to assume the first base will always be able to hold a couple more, don't charge for these since they were not needed to be transferred **/
                 if ($first === true)
                 {
                     $mod = $qty % $divisor;
@@ -294,7 +292,7 @@ class OXC {
 
                 if ($newQty > 0)
                 {
-                    $this->transferItem($item, $newQty, $baseID);
+                    $this->transferItem($item, $newQty, $baseID, false);
                 }
 
                 $first = false;
@@ -342,12 +340,12 @@ class OXC {
     /** Calculates Available Storage Space **/
     private function maxStorage($baseID) {
         $baseArray = $this->save->YAMLArray[1]['bases'][$baseID];
-
+        
         $space = 0;
         foreach ($baseArray['facilities'] as $row)
-        {
-            if (isset($this->loadedMods['facilities'][$row['type']]['storage']) && !isset($row['buildTime']) && $row['disabled'] == false)
-            {
+        {            
+            if (isset($this->loadedMods['facilities'][$row['type']]['storage']) && !isset($row['buildTime']) && $row['disabled'] == 'false')
+            {                
                 $space += $this->loadedMods['facilities'][$row['type']]['storage'];
             }                    
         }
@@ -380,8 +378,7 @@ class OXC {
         /** Don't forget existing transfers **/
         if ($includeTransfer)
         {
-            $usedStorage += $this->activeTransfers($baseID, 'space');
-            //print_r($this->activeTransfers($baseID, 'space').PHP_EOL);
+            $usedStorage += $this->activeTransfers($baseID, 'space');            
         }
 
         return $usedStorage;
@@ -426,15 +423,15 @@ class OXC {
 
 
         if ($availableSpace > $needSpace) /** I shouldn't need this, but whatever **/
-        {
+        {            
             return true;
         }        
         else if ($this->maxStorage($baseID) < $needSpace) /** If the item is bigger than all available space **/
-        {
+        {         
             return false;
         }
         else if ($needSpace > $this->usedStorage($baseID, false)) /** If we at don't have at least enough shit that we can sell or transfer to keep it **/
-        {
+        {         
             return false;
         }
         return false; 
@@ -443,7 +440,7 @@ class OXC {
 
     /** put an item in the transfer block, and charges for it **/
     private function transferItem ($type, $qty, $baseID, $charge = true) {
-        if (!$this->canTransfer($type, $qty, $baseID)) {
+        if (!$this->canTransfer($type, $qty, $baseID)) {            
             return false;
         }
         
@@ -460,6 +457,7 @@ class OXC {
             $time = $this->loadedMods['items'][$type]['transferTime'];
         }
 
+        
         $array = array('hours' => $time,
                        'itemId'  => $type,
                        'itemQty' => $qty);
@@ -487,15 +485,13 @@ class OXC {
     private function buyItem($type, $qty, $baseID) { 
         $return = true;
         /** see if item can be bought - respects hiddenPurchaseItems **/
-        if (!isset($this->loadedMods['items'][$type]['cost']) || @$this->save->YAMLArray[1]['hiddenPurchaseItems'][$type] == true) {
-            //print_r("Unable to Buy ".$type.PHP_EOL);
+        if (!isset($this->loadedMods['items'][$type]['cost']) || @$this->save->YAMLArray[1]['hiddenPurchaseItems'][$type] == true) { /** Unable to Buy **/            
             return false;;
         }
         /** see if item is researched **/
         else if (is_array($this->loadedMods['items'][$type]['requiresBuy'])) { 
             foreach ($this->loadedMods['items'][$type]['requiresBuy'] AS $check) {
-                if (array_search($check, $this->save->YAMLArray[1]['discovered']) === false) {
-                    //print_r('NOT RESEARCHED (BUY)');
+                if (array_search($check, $this->save->YAMLArray[1]['discovered']) === false) { /** Not Researched **/                    
                     return false;
                 }
             }
@@ -522,12 +518,9 @@ class OXC {
     private function produceItem ($type, $qty, $baseID) {
         if ($qty < 0)
         {
-            echo PHP_EOL.$type.' is negative ('.$qty.')'.PHP_EOL;
+            //echo PHP_EOL.$type.' is negative ('.$qty.')'.PHP_EOL;
         }
-        if ($type == 'STR_ALIEN_ALLOYS')
-        {
-            print_r($qty.PHP_EOL);
-        }
+        
         /** See if item can be manufactured **/
         $return = false;
 
@@ -549,9 +542,7 @@ class OXC {
                 {
 
                     /** Respect Hidden Manufacturing Items **/
-                    if (@$this->save->YAMLArray[1]['manufactureRuleStatus'][$name] == 2)
-                    {
-                        //print_r('HIDDEN');
+                    if (@$this->save->YAMLArray[1]['manufactureRuleStatus'][$name] == 2) { /** Respect Hidden Manufacturing Items **/
                         continue;
                     }
 
@@ -560,15 +551,12 @@ class OXC {
                     {
                         foreach ($project['requires'] AS $check)
                         {
-                            if (array_search($check, $this->save->YAMLArray[1]['discovered']) === false)
-                            {
-                                //print_r('NOT RESEARCHED');
+                            if (array_search($check, $this->save->YAMLArray[1]['discovered']) === false) { /** Not researched **/
                                 continue 2;
                             }
                         }
                     }
-
-                    //print_r($project);
+                    
                     $qty = $qty / $project['producedItems'][$type];
                     $return = true;
                     break;

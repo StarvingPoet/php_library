@@ -37,9 +37,9 @@ class YAML {
                                                                                       'true' => array($this, 'yaml_tag_callback')                                                                                      
                                                                                       ));
                                                                                       
-                foreach($this->YAMLArray[1]['missionStatistics'] as $x) {
+                /*foreach($this->YAMLArray[1]['missionStatistics'] as $x) {
                     var_dump($x['success']);
-                }
+                }*/
             }
             else
             {                
@@ -84,7 +84,7 @@ class YAML {
     {
         if ($value === 'y' or $value === 'Y')
         {
-            return '"y"';
+            return 'y';
         }
         else if (is_numeric($value))
         {
