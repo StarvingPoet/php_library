@@ -338,11 +338,9 @@ class OXC {
     }
 
     /** Calculates Available Storage Space **/
-    private function maxStorage($baseID) {
-        $baseArray = $this->save->YAMLArray[1]['bases'][$baseID];
-        
+    private function maxStorage($baseID) {        
         $space = 0;
-        foreach ($baseArray['facilities'] as $row)
+        foreach ($this->save->YAMLArray[1]['bases'][$baseID]['facilities'] as $row)
         {            
             if (isset($this->loadedMods['facilities'][$row['type']]['storage']) && !isset($row['buildTime']) && $row['disabled'] == 'false')
             {                
@@ -385,31 +383,81 @@ class OXC {
         
     }
 
+    /** Calculated available living space **/
+    private function maxLivingSpace($baseID) {
+        $space = 0;
+        foreach ($this->save->YAMLArray[1]['bases'][$baseID]['facilities'] as $row)
+        {            
+            if (isset($this->loadedMods['facilities'][$row['type']]['personnel']) && !isset($row['buildTime']) && $row['disabled'] == 'false')
+            {                
+                $space += $this->loadedMods['facilities'][$row['type']]['personnel'];
+            }                    
+        }
+     
+        return $space;
+        
+    }
+    /** Calculates how much living quarters are used **/
+    private function usedLivingSpace($baseID, $includeTransfer = true) {
+        $usedSpace = 0;
+        
+        /** Pull out working engineers / scientists **/
+        foreach(@$this->save->YAMLArray[1]['bases'][$baseID]['research'] AS $key => $project) {
+            $usedSpace += $project['assigned'];
+        }
+        foreach(@$this->save->YAMLArray[1]['bases'][$baseID]['productions']AS $key => $project) {
+            $usedSpace += $project['assigned'];
+        }
+        $usedSpace += $this->save->YAMLArray[1]['bases'][$baseID]['engineers'];
+        $usedSpace += $this->save->YAMLArray[1]['bases'][$baseID]['scientists'];
+        
+         /** Don't forget existing transfers **/
+        if ($includeTransfer)
+        {
+            $usedSpace += $this->activeTransfers($baseID, 'space');            
+        }
+
+        return $usedSpace;        
+    }
+    
     /**  Returns the activeTransfer TO a base.     
      *
      * @$type = two options 'space' returns how much space is needed for the items enroute, 
-     *                      'items' returns an array of items enroute    
+     *                      'items' returns an array of items enroute   
+                            'units' returns the numbers of soldiers
      */
     private function activeTransfers($baseID, $type = 'space') {
         
+        
         $usedStorage = 0;
         $itemEnroute = array();
-        if (is_array($this->save->YAMLArray[1]['bases'][$baseID]['transfers']))
-        {
-            foreach($this->save->YAMLArray[1]['bases'][$baseID]['transfers'] AS $transfer)
-            {
-                $itemsEnroute[$transfer['itemId']] = $transfer['itemQty'];
-                $usedStorage += ($this->loadedMods['items'][$transfer['itemId']]['size'] * $transfer['itemQty']);
+        
+        if ($type == 'units') {
+            if (is_array($this->save->YAMLArray[1]['bases'][$baseID]['transfers'])) {
+                foreach($this->save->YAMLArray[1]['bases'][$baseID]['transfers'] AS $transfer) {
+                    if (isset($transfer['soldier'])) {
+                        $usedStorage += 1;
+                    }
+                }
             }
-        }
-
-        if ($type == 'items')
-        {
-            return $itemsEnroute;
-        }
-        if ($type == 'space')
-        {
             return $usedStorage;
+            
+        }
+        else {
+            if (is_array($this->save->YAMLArray[1]['bases'][$baseID]['transfers'])) {
+                foreach($this->save->YAMLArray[1]['bases'][$baseID]['transfers'] AS $transfer)
+                {
+                    $itemsEnroute[$transfer['itemId']] = $transfer['itemQty'];
+                    $usedStorage += ($this->loadedMods['items'][$transfer['itemId']]['size'] * $transfer['itemQty']);
+                }
+            }
+
+            if ($type == 'items') {
+                return $itemsEnroute;
+            }
+            if ($type == 'space') {
+                return $usedStorage;
+            }
         }
         return false;
     }
@@ -436,6 +484,10 @@ class OXC {
         }
         return false; 
 
+    }
+    
+    private function canTransferSoldier($baseID) {
+        $availableSpace = $this->max;
     }
 
     /** put an item in the transfer block, and charges for it **/
@@ -470,6 +522,17 @@ class OXC {
         }
 
         return true;
+    }
+    
+    /** Puts a soldier item in the transfer queue - $soldier must be an array **/
+    private function transferSoldier ($soldier, $baseID) {
+        if (!is_array($soldier)) {            
+            $this->_errorHandler(__FUNCTION__, '$soldier needs to be a valid soldier type');
+        }
+        
+        
+
+        
     }
 
     /** First tries to buy item, then if not possible, tries to manufacture - respects hidden entries **/
@@ -688,158 +751,14 @@ class OXC {
 
         $reviveCount  = 0;
         $counts       = array();
-        $newlyDead    = array();
+        $newlyDead    = array(); // Uncloned soldiers from the death list go here
         $newSoldier   = array();
+        
+        /** TODO - Make these external **/
         $defaultNames = array('Case Officer', 'K9', 'Al');
+        /** We Load soldier stats from ruleset **/
 
-        /** Load soldier stats from ruleset **/
-
-        /** Default XCOM Soldier **
-        $newSoldier[] = array(
-            'type' => 'STR_SOLDIER',
-            'costBuy' => 40000,
-            'costSalary' => 15000,
-            'minStats' => array( 
-                'tu' => 50,
-                'stamina' => 40,
-                'health' => 25,
-                'bravery' => 10,
-                'reactions' => 30,
-                'firing' => 40,
-                'throwing' => 35,
-                'strength' => 20,
-                'psiStrength' => 0,
-                'psiSkill' => 0,
-                'melee' => 20),
-            'maxStats' => array(
-                'tu' => 60,
-                'stamina' => 70,
-                'health' => 40,
-                'bravery' => 60,
-                'reactions' => 60,
-                'firing' => 70,
-                'throwing' => 65,
-                'strength' => 40,
-                'psiStrength' => 100,
-                'psiSkill' => 16,
-                'melee' => 70));
-
-        /** X-Com Files **
-        $newSoldier[] = array(
-            'type' => 'STR_DOG',
-            'costBuy' => 10000,
-            'costSalary' => 800,
-            'minStats' => array( 
-                'tu' => 60,
-                'stamina' => 80,
-                'health' => 25,
-                'bravery' => 10,
-                'reactions' => 75,
-                'firing' => 0,
-                'throwing' => 0,
-                'strength' => 1,
-                'psiStrength' => 40,
-                'psiSkill' => 0,
-                'melee' => 70),
-            'maxStats' => array(
-                'tu' => 70,
-                'stamina' => 90,
-                'health' => 30,
-                'bravery' => 20,
-                'reactions' => 75,
-                'firing' => 0,
-                'throwing' => 0,
-                'strength' => 1,
-                'psiStrength' => 40,
-                'psiSkill' => 0,
-                'melee' => 90));  
-        $newSoldier[] = array(
-            'type' => 'STR_MUGGLE_AI',
-            'costBuy' => 50000,
-            'costSalary' => 10000,
-            'minStats' => array( 
-                'tu' => 55,
-                'stamina' => 90,
-                'health' => 15,
-                'bravery' => 0,
-                'reactions' => 0,
-                'firing' => 50,
-                'throwing' => 0,
-                'strength' => 0,
-                'psiStrength' => 0,
-                'psiSkill' => 0,
-                'melee' => 0),
-            'maxStats' => array(
-                'tu' => 55,
-                'stamina' => 90,
-                'health' => 15,
-                'bravery' => 0,
-                'reactions' => 0,
-                'firing' => 50,
-                'throwing' => 0,
-                'strength' => 0,
-                'psiStrength' => 0,
-                'psiSkill' => 0,
-                'melee' => 0)); 
-        $newSoldier[] = array(
-            'type' => 'STR_ALIEN_AI',
-            'costBuy' => 50000,
-            'costSalary' => 10000,
-            'minStats' => array( 
-                'tu' => 50,
-                'stamina' => 90,
-                'health' => 15,
-                'bravery' => 0,
-                'reactions' => 0,
-                'firing' => 30,
-                'throwing' => 0,
-                'strength' => 0,
-                'psiStrength' => 0,
-                'psiSkill' => 0,
-                'melee' => 0),
-            'maxStats' => array(
-                'tu' => 50,
-                'stamina' => 90,
-                'health' => 15,
-                'bravery' => 0,
-                'reactions' => 0,
-                'firing' => 30,
-                'throwing' => 0,
-                'strength' => 0,
-                'psiStrength' => 0,
-                'psiSkill' => 0,
-                'melee' => 0)); 
-
-        /* X-PIRATEZ
-        $newSoldier = array(
-            'type' => 'STR_SOLDIER_S',
-            'costBuy' => 20000,
-            'costSalary' => 5000,
-            'minStats' => array( 
-                'tu' => 60,
-                'stamina' => 30,
-                'health' => 40,
-                'bravery' => 10,
-                'reactions' => 40,
-                'firing' => 40,
-                'throwing' => 40,
-                'strength' => 10,
-                'psiStrength' => 25,
-                'psiSkill' => 0,
-                'melee' => 30),
-            'maxStats' => array(
-                'tu' => 80,
-                'stamina' => 80,
-                'health' => 60,
-                'bravery' => 70,
-                'reactions' => 70,
-                'firing' => 70,
-                'throwing' => 65,
-                'strength' => 50,
-                'psiStrength' => 60,
-                'psiSkill' => 0,
-                'melee' => 90));
-                */
+        
 
         /* Pull out uncloned soldiers from the death list */
         foreach ($this->save->YAMLArray[1]['deadSoldiers'] AS $key=>$soldier)
@@ -868,7 +787,7 @@ class OXC {
 
         /** Look for soldiers laying around and doing nothing, give them a purpose in life **/
         $wsKey               = 0;
-        $waitingSoldiers     = array();
+        $waitingSoldiers     = array();  //This is for unnamed soldiers in training
         $soldierDeleteBuffer = array();
         $soldierBaseBalance  = array();  //This is to keep soldiers balanced across all active bases
         $soldierPsiStrMid    = array();
@@ -879,14 +798,16 @@ class OXC {
             {
                 foreach ($base['soldiers'] AS $soldierID => $soldierCheck)
                 {
-                    if (in_array($soldierCheck['name'], $defaultNames))
-                    {
+                    if (in_array($soldierCheck['name'], $defaultNames)) { /** Place 'unnamed soldiers' into a buffer **/
                         $waitingSoldiers[$wsKey]     = $soldierCheck; 
                         $soldierDeleteBuffer[$wsKey] = array('baseID'=>$baseID, 'soldierID'=>$soldierID);
                         $wsKey++;
+                        
+                        $this->createSoldier($soldierCheck['type'], $soldierCheck['name']);
+                        
+                        
                     }
-                    else if ($baseID < $activeBases)
-                    {
+                    else if ($baseID < $activeBases) { /** figure out base soldier composition  **/
                         if (!is_array($soldierBaseBalance[$soldierCheck['type']]))
                         {
                             $soldierBaseBalance[$soldierCheck['type']] = array();
@@ -895,10 +816,8 @@ class OXC {
                                 $soldierBaseBalance[$soldierCheck['type']][$i] = 0;
                             }
                         }
-
                         /** build a temp array of mid psiStrength Values **/
-                        if (!isset($soldierPsiStrMid[$soldierCheck['type']]))
-                        {
+                        if (!isset($soldierPsiStrMid[$soldierCheck['type']])) {
                             foreach ($this->loadedMods['soldiers'] AS $nSS)
                             {
                                 if ($nSS['type'] == $soldierCheck['type'])
@@ -915,8 +834,7 @@ class OXC {
                         /** Use that info to figure out base composition **/
                         $type = $soldierCheck['type'];
 
-                        if (!is_null($soldierPsiStrMid[$soldierCheck['type']]))
-                        {
+                        if (!is_null($soldierPsiStrMid[$soldierCheck['type']])) {
                             if ($soldierCheck['currentStats']['psiStrength'] < $soldierPsiStrMid[$soldierCheck['type']])
                             {
                                 $type .= "_X";
@@ -929,7 +847,7 @@ class OXC {
             }
         }
 
-        ksort($soldierBaseBalance, SORT_NATURAL);
+        ksort($soldierBaseBalance, SORT_NATURAL); /** Array of soldier types by base with low-PSI strength breakdown **/
         //print_r($soldierBaseBalance);
 
         /** BRAAAAAIIIINNNNSSSS **/
@@ -952,11 +870,9 @@ class OXC {
             $reviveCount++;   
             
             /** Pull from waiting soldiers first **/
-            if (count($waitingSoldiers) != 0)
-            {
+            if (count($waitingSoldiers) != 0) {
                 /** Make sure types match, pull in old diary, then unset original soldier (possibly replace with new clone?) **/
-                foreach ($waitingSoldiers AS $wsKey => $ws)
-                {
+                foreach ($waitingSoldiers AS $wsKey => $ws) {
                     if ($ws['type'] == $soldier['type'])
                     {            
                         $soldier                = $waitingSoldiers[$wsKey];
@@ -980,8 +896,7 @@ class OXC {
             }
 
             /** Update Soldier Count **/
-            if (isset($counts[$name]))
-            {
+            if (isset($counts[$name])) {
                 $soldier['name'] = $name." ".($counts[$name] + 1);        
             }
 
@@ -995,23 +910,11 @@ class OXC {
                 $soldier['training']          = 'false';
                 $soldier['improvement']       = 0;
                 $soldier['psiStrimprovement'] = 0;
-                $soldier['rank']              = 0;
-
-                /* Initialize stat array - default is first entry */
-                //$statArray = $this->loadedMods['soldiers'][$soldier['type']];
-
-                /* Now see if the specific stat array exists *
-                foreach ($newSoldier AS $sKey => $sArray)
-                {
-                    if ($sArray['type'] == $soldier['type'])
-                    {
-                        $statArray = $newSoldier[$sKey];
-                    }
-                }    */        
+                $soldier['rank']              = 0;                                
                 
-                /** Generate New Officer / Clone **/                    
                 /** Use a new soldier, maintain diary **/
-                if (stripos($soldier['name'], '~') == false) { /** Use a new soldier, maintain diary **/ 
+                if (stripos($soldier['name'], '~') == false) { /** Use a new soldier, maintain diary (we use `~` to denote actual cloning **/ 
+                    
                     
                     foreach ($soldier['currentStats'] AS $stat=>$value)
                     {
@@ -1027,7 +930,7 @@ class OXC {
                         $soldier['initialStats'][$stat] = $soldier['currentStats'][$stat] = $newValue;
                     }
                 }
-                else { /* Clone */
+                else { /* Actual Cloning */
                     echo "Disabled Clone section, you shouldn't see me \n";
                     /*
                     foreach ($soldier['currentStats'] AS $stat=>$value)
@@ -1116,6 +1019,32 @@ class OXC {
         $index = key($this->save->YAMLArray[1]['funds']);
 
         $this->save->YAMLArray[1]['funds'][$index] += $cost;
+    }
+    
+    private function createSoldier($type, $name) { /** doesn't set nationality */
+        $soldier = array('type' => $type,
+                         'name' => $name,
+                         'id'   => $this->save->YAMLArray[1]['ids'][$type],
+                         'armor' => $this->loadedMods['soldiers'][$type]['armor'],
+                         'gender' => rand(0,1),
+                         'look' => rand(0,3),
+                         'lookVariant' => rand(0,15),
+                         'improvement' => 0,
+                         'psiStrimprovement' => 0,
+                         'missions' => 0);                         
+                         
+        foreach($this->loadedMods['soldiers'][$type]['minStats'] AS $stat => $value)
+        {
+            $newValue = rand($this->loadedMods['soldiers'][$type]['minStats'][$stat], $this->loadedMods['soldiers'][$type]['maxStats'][$stat]);
+            if ($stat == 'bravery') { /** Round Bravery to the nearest 10 **/
+                $newValue = round($newValue, -1);
+            }
+            if ($stat == 'psiSkill') { /** Keep untrained soldiers untrained **/
+                $newValue = 0;
+            }
+            $soldier['initialStats'][$stat] = $soldier['currentStats'][$stat] = $newValue;
+        }
+        return $soldier;
     }
 
 }
