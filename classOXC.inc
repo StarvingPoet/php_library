@@ -402,11 +402,15 @@ class OXC {
         $usedSpace = 0;
         
         /** Pull out working engineers / scientists **/
-        foreach(@$this->save->YAMLArray[1]['bases'][$baseID]['research'] AS $key => $project) {
-            $usedSpace += $project['assigned'];
+        if (is_array($this->save->YAMLArray[1]['bases'][$baseID]['research'])) {
+            foreach($this->save->YAMLArray[1]['bases'][$baseID]['research'] AS $key => $project) {
+                $usedSpace += $project['assigned'];
+            }
         }
-        foreach(@$this->save->YAMLArray[1]['bases'][$baseID]['productions']AS $key => $project) {
-            $usedSpace += $project['assigned'];
+        if (is_array($this->save->YAMLArray[1]['bases'][$baseID]['productions'])) {
+            foreach($this->save->YAMLArray[1]['bases'][$baseID]['productions'] AS $key => $project) {
+                $usedSpace += $project['assigned'];
+            }
         }
         $usedSpace += $this->save->YAMLArray[1]['bases'][$baseID]['engineers'];
         $usedSpace += $this->save->YAMLArray[1]['bases'][$baseID]['scientists'];
@@ -486,8 +490,13 @@ class OXC {
 
     }
     
-    private function canTransferSoldier($baseID) {
-        $availableSpace = $this->max;
+    private function canTransferSoldier($baseID) {        
+        if ($this->maxLivingSpace($baseID) > $this->usedLivingSpace($baseID)) {
+            return true;
+        }
+        else {
+            return false;
+        }
     }
 
     /** put an item in the transfer block, and charges for it **/
@@ -525,13 +534,24 @@ class OXC {
     }
     
     /** Puts a soldier item in the transfer queue - $soldier must be an array **/
-    private function transferSoldier ($soldier, $baseID) {
+    private function transferSoldier ($soldier, $baseID, $force = false) {
         if (!is_array($soldier)) {            
             $this->_errorHandler(__FUNCTION__, '$soldier needs to be a valid soldier type');
         }
         
-        
-
+        if ($this->canTransferSoldier($baseID) || $force) {
+            /** Create the Transfer array if empty **/
+            if (!isset($this->save->YAMLArray[1]['bases'][$baseID]['transfers'])) {
+                $this->save->YAMLArray[1]['bases'][$baseID]['transfers'] = array();
+            }            
+            
+            $array = array('hours' => 72,
+                           'soldier' => $soldier);
+            $this->save->YAMLArray[1]['bases'][$baseID]['transfers'][] = $array;            
+        }
+        else {
+            return false;
+        }
         
     }
 
@@ -801,11 +821,7 @@ class OXC {
                     if (in_array($soldierCheck['name'], $defaultNames)) { /** Place 'unnamed soldiers' into a buffer **/
                         $waitingSoldiers[$wsKey]     = $soldierCheck; 
                         $soldierDeleteBuffer[$wsKey] = array('baseID'=>$baseID, 'soldierID'=>$soldierID);
-                        $wsKey++;
-                        
-                        $this->createSoldier($soldierCheck['type'], $soldierCheck['name']);
-                        
-                        
+                        $wsKey++;                        
                     }
                     else if ($baseID < $activeBases) { /** figure out base soldier composition  **/
                         if (!is_array($soldierBaseBalance[$soldierCheck['type']]))
@@ -858,11 +874,10 @@ class OXC {
             $soldier = $this->save->YAMLArray[1]['deadSoldiers'][$key];
 
             /** All Soldiers need 'transfer' time **/
-            $soldier['recovery'] = 3;
+            $soldier['recovery'] = 0;
 
             /** Ignore the Un-named **/
-            if (in_array($soldier['name'], $defaultNames)) 
-            {
+            if (in_array($soldier['name'], $defaultNames)) {
                 continue;
             }
 
@@ -887,6 +902,11 @@ class OXC {
                         $soldier['training']    = 'false';
                         $living                 = true;
 
+                        
+                        /** create new replacement **/                        
+                        $replacement = $this->createSoldier($soldier['type'], $ws['name']);                        
+                        $this->transferSoldier($replacement, $soldierDeleteBuffer[$wsKey]['baseID'], true);
+                        
                         unset($this->save->YAMLArray[1]['bases'][$soldierDeleteBuffer[$wsKey]['baseID']]['soldiers'][$soldierDeleteBuffer[$wsKey]['soldierID']]);
                         unset($waitingSoldiers[$wsKey]);
                         break;
@@ -1005,7 +1025,8 @@ class OXC {
 
             $index = array_search(min($soldierBaseBalance[$search_type]), $soldierBaseBalance[$search_type]);
             $soldierBaseBalance[$search_type][$index] ++;
-            $this->save->YAMLArray[1]['bases'][$index]['soldiers'][] = $soldier;
+            $this->transferSoldier($soldier, $index, true);
+            //$this->save->YAMLArray[1]['bases'][$index]['soldiers'][] = $soldier;
             unset($soldierRelocation[$key]);
 
             $ret[] = $soldier['name'].' => '.$this->save->YAMLArray[1]['bases'][$index]['name'];
@@ -1024,14 +1045,16 @@ class OXC {
     private function createSoldier($type, $name) { /** doesn't set nationality */
         $soldier = array('type' => $type,
                          'name' => $name,
-                         'id'   => $this->save->YAMLArray[1]['ids'][$type],
+                         'id'   => $this->save->YAMLArray[1]['ids']['STR_SOLDIER'],
                          'armor' => $this->loadedMods['soldiers'][$type]['armor'],
                          'gender' => rand(0,1),
                          'look' => rand(0,3),
                          'lookVariant' => rand(0,15),
                          'improvement' => 0,
-                         'psiStrimprovement' => 0,
-                         'missions' => 0);                         
+                         'psiStrImprovement' => 0,
+                         'missions' => 0,
+                         'rank' => 0,
+                         'nationality' => 0);                         
                          
         foreach($this->loadedMods['soldiers'][$type]['minStats'] AS $stat => $value)
         {
@@ -1044,6 +1067,14 @@ class OXC {
             }
             $soldier['initialStats'][$stat] = $soldier['currentStats'][$stat] = $newValue;
         }
+        
+        /** Charge **/
+        $fee = -1 * $this->loadedMods['soldiers'][$type]['costBuy'];        
+        $this->alterFunds($fee);
+        
+        /** Update ID **/
+        $this->save->YAMLArray[1]['ids']['STR_SOLDIER']++;
+        
         return $soldier;
     }
 
