@@ -148,7 +148,7 @@ class CLI {
      */
     function cls()
     {
-        return false;
+        //return false;
         fwrite($this->stdout, chr(27).chr(91).'H'.chr(27).chr(91).'J');
 
         /* work back up cleaning every line as you go, do a few extra to make sure*/

@@ -104,16 +104,16 @@ class OXC {
                         $dump = new MyDirectory($File['path']);
                         foreach ($dump->Contents as $dmpFile)
                         {
-                            if ($dmpFile['ext'] == 'rul')
-                            {
+                            
+                            if ($dmpFile['ext'] == 'rul' || $dmpFile['name'] == 'en-US.yml')
+                            {                                
                                 $yaml2 = new YAML($dmpFile['fullPath'],0);
                                 if ($this->createModArray($yaml2->YAMLArray, $modName) === false)
                                 {
                                     $this->_errorHandler(__FUNCTION__, $dmpFile['fullPath']. ' is not formatted properly.');
-                                }
+                                }                                
                             }
-                        }
-
+                        }                        
                         file_put_contents($cacheFile, json_encode($this->mods[$modName]));  
                     }
 
@@ -124,6 +124,43 @@ class OXC {
             }
         }
     }
+    /** reindexes mods so that they type is used as a key when available **/
+    private function createModArray($yaml, $name) {
+        /** first assumption - ruleset is coded properly **/
+        if (is_int(key($yaml)))
+        {
+            return false;
+        }
+
+        foreach ($yaml as $cat => $data)
+        {            
+            $types = null;
+            if (is_array($data)) {                
+                if (key($data) === 0) { /** if array is non-associative **/                    
+                    foreach ($data as $key => $row) { /** walk through array, reindexing as needed**/
+                        if (isset($row['type']))
+                        {
+                            $data[$row['type']] = $row;
+                            unset($data[$key]);
+                        }
+                        else if (isset($row['name']) && $cat == 'manufacture')
+                        {
+                            $data[$row['name']] = $row;
+                            unset($data[$key]);
+                        }
+                    }                    
+                }
+                else { /** Only used for language files as far as I can tell **/                                    
+                    // special language file processing    
+                }
+                $this->mods[$name][$cat] = $data;                                    
+            }
+            else { /** I think this is only used for vars **/
+                $this->mods[$name]['vars'][$cat] = $data;
+            }
+        }        
+    }
+
 
     /** Loads a save AND creates a modlist **/
     public function loadSave($file, $path) {
@@ -397,6 +434,7 @@ class OXC {
         return $space;
         
     }
+    
     /** Calculates how much living quarters are used **/
     private function usedLivingSpace($baseID, $includeTransfer = true) {
         $usedSpace = 0;
@@ -431,8 +469,6 @@ class OXC {
                             'units' returns the numbers of soldiers
      */
     private function activeTransfers($baseID, $type = 'space') {
-        
-        
         $usedStorage = 0;
         $itemEnroute = array();
         
@@ -517,18 +553,48 @@ class OXC {
         else {
             $time = $this->loadedMods['items'][$type]['transferTime'];
         }
-
         
-        $array = array('hours' => $time,
-                       'itemId'  => $type,
-                       'itemQty' => $qty);
-        $this->save->YAMLArray[1]['bases'][$baseID]['transfers'][] = $array;
+        /** Check to see if a transfer already exists and add to existing transfer if so **/
+        $found = false;
+        foreach ($this->save->YAMLArray[1]['bases'][$baseID]['transfers'] as $id=>$transfer) {
+            if ($transfer['itemId'] == $type && $transfer['hours'] == $time)
+            {
+                $found = true;
+                $this->save->YAMLArray[1]['bases'][$baseID]['transfers'][$id]['itemQty'] += $qty;                
+            }
+        }
+        
+        if ($found === false) {
+            $array = array('hours' => $time,
+                           'itemId'  => $type,
+                           'itemQty' => $qty);                                               
+                           
+            $this->save->YAMLArray[1]['bases'][$baseID]['transfers'][] = $array;
+        }
 
         /** don't charge transfer fees for purchases **/
         if ($charge === true) {
             $fee = -1 * abs(50 * $qty);
             $this->alterFunds($fee);
         }
+        
+        /** Sort transfers alphabetically... because**/        
+        $tempArray = $sortArray = array();
+        foreach ($this->save->YAMLArray[1]['bases'][$baseID]['transfers'] AS $key=>$transfer)
+        {
+            if (isset($transfer['itemId']))
+            {                
+                $sortArray[$key] = $this->loadedMods['en-US'][$transfer['itemId']];
+                $tempArray[$key] = $transfer;
+                unset($this->save->YAMLArray[1]['bases'][$baseID]['transfers'][$key]);
+            }                
+        }
+        
+        asort($sortArray);
+        foreach ($sortArray as $key=>$data)
+        {
+            $this->save->YAMLArray[1]['bases'][$baseID]['transfers'][] = $tempArray[$key];            
+        }        
 
         return true;
     }
@@ -720,43 +786,7 @@ class OXC {
         return $return;
 
     }
-    /** reindexes mods so that they type is used as a key when available **/
-    private function createModArray($yaml, $name) {
-        /** first assumption - ruleset is coded properly **/
-        if (is_int(key($yaml)))
-        {
-            return false;
-        }
-
-        foreach ($yaml as $cat => $data)
-        {
-            $types = null;
-            if (is_array($data))
-            {
-                /** if array is non-associative **/
-                if (key($data) === 0)                    
-                {
-                    /** walk through array, reindexing as needed**/
-                    foreach ($data as $key => $row)
-                    {
-                        if (isset($row['type']))
-                        {
-                            $data[$row['type']] = $row;
-                            unset($data[$key]);
-                        }
-                        else if (isset($row['name']) && $cat == 'manufacture')
-                        {
-                            $data[$row['name']] = $row;
-                            unset($data[$key]);
-                        }
-                    }
-                        
-                    $this->mods[$name][$cat] = $data;                    
-                }
-            }           
-        }
-    }
-
+    
     public function cloneSoldiers($reviveLimit = 0, $activeBases = 0) {
         /** check arguments **/
         if (!is_numeric($reviveLimit) || !is_numeric($activeBases) || is_null($this->loadedMods))
