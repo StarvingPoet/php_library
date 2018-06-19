@@ -19,9 +19,7 @@ class OXC {
     var $canTransfer = array();
     var $mfgBase = 2;
     
-    /**
-     * Initiated with pointer to mod directory
-     */
+    /** Initiated with pointer to mod directory **/     
     public function __construct($modDir) {
         if (is_dir($modDir))
         {
@@ -38,8 +36,7 @@ class OXC {
         $this->mods = NULL;
     }
 
-    /**
-     * This throws an exception that will be caught in the constructor.
+    /** This throws an exception that will be caught in main script.
      *
      * @method   method the error occured in.
      * @details  text string that will be returned in the email and in the exception.
@@ -56,6 +53,7 @@ class OXC {
         throw new exception ($details, $this->errorStatus);
     }
 
+    /** Parse mods into json cache **/
     public function collectMods($dir, $level = 0) {
         /** We only deal with direct mod directories, or a parent containing mods - we will never recurse more than once **/
         if ($level > 1)
@@ -124,6 +122,7 @@ class OXC {
             }
         }
     }
+    
     /** reindexes mods so that they type is used as a key when available **/
     private function createModArray($yaml, $name) {
         /** first assumption - ruleset is coded properly **/
@@ -161,7 +160,6 @@ class OXC {
         }        
     }
 
-
     /** Loads a save AND creates a modlist **/
     public function loadSave($file, $path) {
         $file = $path.$file;
@@ -180,7 +178,8 @@ class OXC {
             }
         }
     }
-    /** Creates a new save, using $file as the internal game name **/
+    
+    /** Creates a new save, using $name as the internal game name **/
     public function saveAs($name, $path) {
         /** Update the internal name **/
         $this->save->YAMLArray[0]['name'] = $name;
@@ -220,11 +219,12 @@ class OXC {
         }
     }
 
-    public function resupplyBases($template = 0) {
+    public function resupplyBases($template = 0, $bases = null) {
         if (!isset($this->save->YAMLArray[1])) {
             $this->_errorHandler(__FUNCTION__, 'Save File Not loaded or improperly formatted');
         }
         
+        /** This grabs the item list from one of the craft loadouts **/
         $key = 'globalCraftLoadout'.$template;
         if (!isset($this->save->YAMLArray[1][$key]))
         {
@@ -250,6 +250,11 @@ class OXC {
             /* First see how much each base needs **/
             foreach ($this->save->YAMLArray[1]['bases'] AS $baseID => $baseArray)
             {
+                if (is_array($bases)) { /** Limit to selected bases **/
+                    if (array_search($baseID, $bases) === false) {
+                        continue;
+                    }
+                }
                 $enroute = $this->activeTransfers($baseID, 'items');
                 /** Pull out the item transfers first, but cap at 0 - otherwise we will wind up cloning items **/
                 if (isset($enroute[$item])) {
@@ -578,7 +583,7 @@ class OXC {
             $this->alterFunds($fee);
         }
         
-        /** Sort transfers alphabetically... because**/        
+        /** Sort transfers alphabetically... because **/        
         $tempArray = $sortArray = array();
         foreach ($this->save->YAMLArray[1]['bases'][$baseID]['transfers'] AS $key=>$transfer)
         {
@@ -657,8 +662,7 @@ class OXC {
         return $return;
     }
 
-    /** 
-     * When we look for manufacturing items - we look in this order
+    /** Create an item and add to manufacturing queue
      * 1. Manufacturing entry with the name that matches the item type
      * 2. run through every entry and find the first one that we can make, taking research into account
      **
