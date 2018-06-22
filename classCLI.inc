@@ -675,6 +675,12 @@ class CLI {
             }
         }
     }
+
+    static function dumpArray($array) {
+        if (isset($GLOBALS['global']['tempDir'])) {
+            file_put_contents($GLOBALS['global']['tempDir'].'dump.txt', print_r($array, true));
+        }
+    }
 }
 
 ?>

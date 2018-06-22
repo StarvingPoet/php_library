@@ -909,13 +909,12 @@ class OXC {
         $newlyDead   = array(); // Uncloned soldiers from the death list go here
         $newSoldier  = array();
 
-        if (is_null($this->defaultNames)) { /** Definied in userVariables, but otherwise assume XCF **/
+        if (is_null($this->defaultNames)) { /** Defined in userVariables, but otherwise assume XCF **/
             $this->defaultNames = array('Case Officer', 'K9', 'Al');
         }
 
         /* Pull out uncloned soldiers from the death list */
-        foreach ($this->save->YAMLArray[1]['deadSoldiers'] AS $key=>$soldier)
-        {
+        foreach ($this->save->YAMLArray[1]['deadSoldiers'] AS $key=>$soldier) {
             /** Remove numbering for accurate counts **/
             $pattern = '/ \d+$/';
             $name = str_replace('..', '', preg_replace($pattern, '', $soldier['name']));
@@ -995,6 +994,9 @@ class OXC {
                 }
             }
         }
+
+        /** sort waiting soldiers by soldier ID so that we are always pulling from the oldest soldiers to maximize training time. **/
+        uasort($waitingSoldiers, function($a, $b) { return $a['id'] <=> $b['id']; });
 
         ksort($soldierBaseBalance, SORT_NATURAL); /** Array of soldier types by base with low-PSI strength breakdown **/
         //print_r($soldierBaseBalance);
