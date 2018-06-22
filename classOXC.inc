@@ -648,7 +648,6 @@ class OXC {
                         {
                             $return += $production['amount'] - $built;
                         }
-
                     }
                 }
             }
@@ -700,11 +699,29 @@ class OXC {
         return $soldier;
     }
 
-    public function resupplyBases($template = 0, $bases = null) {
-        if (!isset($this->save->YAMLArray[1])) {
-            $this->_errorHandler(__FUNCTION__, 'Save File Not loaded or improperly formatted');
+    /** Gets base store count AND worn armor **/
+    private function getStorageCount($type, $baseID) {
+        $qty = 0;
+
+        print_r($type.PHP_EOL);
+        if (isset($this->save->YAMLArray[1]['bases'][$baseID]['items'])) { /** Standard Base Stores **/
+            $qty += $this->save->YAMLArray[1]['bases'][$baseID]['items'][$type];
         }
 
+        foreach ($this->loadedMods['armors'] as &$armor) { /** Check to see if it's armor **/
+            if (isset($armor['storeItem']) && $armor['storeItem'] == $type) {
+                foreach($this->save->YAMLArray[1]['bases'][$baseID]['soldiers'] AS &$soldier) {
+                    if ($soldier['armor'] == $armor['type']) {
+                        $qty += 1;
+                    }
+                }
+            }
+        }
+
+        return $qty;
+    }
+
+    public function resupplyBases($template = 0, $bases = 1) {
         if (is_numeric($bases)) {
             $temp = array();
             for ($i = 0; $i < $bases; $i++) {
@@ -714,7 +731,16 @@ class OXC {
             unset($temp);
         }
 
+        if (!isset($this->save->YAMLArray[1])) {
+            $this->_errorHandler(__FUNCTION__, 'Save File Not loaded or improperly formatted');
+        }
+
+        if (!is_array($bases)) {
+            $this->_errorHandler(__FUNCTION__, '$base variable needs to be an array');
+        }
+
         /** This grabs the item list from one of the craft loadouts **/
+        print_r($template);
         $key = 'globalCraftLoadout'.$template;
         if (!isset($this->save->YAMLArray[1][$key])) {
             $this->save->YAMLArray[1][$key] = array();
@@ -739,18 +765,21 @@ class OXC {
             /* First see how much each base needs **/
             foreach ($this->save->YAMLArray[1]['bases'] AS $baseID => $baseArray)
             {
-                if (is_array($bases)) { /** Limit to selected bases **/
-                    if (array_search($baseID, $bases) === false) {
-                        continue;
-                    }
+                if (array_search($baseID, $bases) === false) { /** Limit to selected bases **/
+                    continue;
                 }
+
                 $enroute = $this->activeTransfers($baseID, 'items');
+
                 /** Pull out the item transfers first, but cap at 0 - otherwise we will wind up cloning items **/
                 if (isset($enroute[$item])) {
                     $qty =  max(($qty - $enroute[$item]), 0);
                 }
+
                 /** if needArray is negative, that means the base has extra and the items will be put into... escrow **/
-                $needArray[$baseID][$item] = $qty - $baseArray['items'][$item];
+                $storeQty = $this->getStorageCount($item, $baseID);
+                $needArray[$baseID][$item] = $qty - $storeQty;
+
                 if ($needArray[$baseID][$item] < 0) {
                     $floatArray[$item] += ( $needArray[$baseID][$item]* -1);
                     $this->save->YAMLArray[1]['bases'][$baseID]['items'][$item] += $needArray[$baseID][$item];
@@ -856,7 +885,6 @@ class OXC {
             if ($production['amount'] < 5) {
                 $production['amount'] = 5;
             }
-
         }
     }
 
