@@ -18,6 +18,7 @@ class OXC {
     var $loadedMods = null;
     var $canTransfer  = array();
     var $defaultNames = null;
+    var $soldierPsiStrMid = array();
     var $mfgBase = 2;
 
     /** Initiated with pointer to mod directory **/
@@ -52,6 +53,71 @@ class OXC {
         file_put_contents($this->errorLog, $error, FILE_APPEND);
 
         throw new exception ($details, $this->errorStatus);
+    }
+
+    /** This fixes all ammo manufacturing to create bulk ammo jobs at 10x instead of the current singleton system **/
+    public function fixAmmoManufacturing() {
+        $newManufacture = array();
+        $i = 0;
+
+        foreach ($this->loadedMods['items'] AS $item) {
+            if ($item['battleType'] == 2) {
+                $i++;
+
+                foreach ($this->loadedMods['manufacture'] AS $manufacture) {
+                    if ($manufacture['name'] == $item['type']) {
+                        $mult = 10;
+                        if (isset($manufacture['producedItems'])) { /** Check to see if this isn't a singleton **/
+                          foreach ($manufacture['producedItems'] AS $prodItem=>$prodQty) {
+                              if ($prodItem == $item['type'] && $prodQty >= 5)
+                              {
+                                  continue 2;
+                              }
+                          }
+                        }
+                        $newManufacture[$i]['name'] = $manufacture['name'];
+                        $newManufacture[$i]['time'] = $manufacture['time']*$mult;
+                        $newManufacture[$i]['cost'] = $manufacture['cost']*$mult;
+                        if (isset($manufacture['requiredItems'])) {
+                            $newManufacture[$i]['requiredItems'] = array();
+                            foreach ($manufacture['requiredItems'] AS $reqItem=>$reqQty) {
+                                $newManufacture[$i]['requiredItems'][$reqItem] = $reqQty*$mult;
+                            }
+                        }
+
+                        $newManufacture[$i]['producedItems'] = array($item['type'] => $mult);
+                    }
+                    else if (isset($manufacture['producedItems'])) {
+                          foreach ($manufacture['producedItems'] AS $prodItem=>$prodQty) {
+                            if ($prodItem == $item['type']) {
+                                print_r('Line: 93 '. $prodItem.PHP_EOL); /** TODO WHAT AM I DOING HERE **/
+                            }
+                          }
+                    }
+                }
+            }
+        }
+
+        $text = 'manufacture:'.PHP_EOL;
+        foreach ($newManufacture AS $row)
+        {
+            $text .= '  - name: '.$row['name'].PHP_EOL;
+            $text .= '    time: '.$row['time'].PHP_EOL;
+            $text .= '    cost: '.$row['cost'].PHP_EOL;
+            if (isset($row['requiredItems'])) {
+                $text .= '    requiredItems:'.PHP_EOL;
+                foreach ($row['requiredItems'] AS $reqItem=>$reqQty) {
+                    $text .= '      '.$reqItem.': '.$reqQty.PHP_EOL;
+                }
+            }
+            $text .= '    producedItems:'.PHP_EOL;
+            foreach ($row['producedItems'] AS $key=>$qty) {
+                $text .= '      '.$key.': '.$qty.PHP_EOL;
+            }
+        }
+
+        file_put_contents($GLOBALS['global']['tempDir'].'ammo.rul', $text);
+        exit();
     }
 
     /** Parse mods into json cache **/
@@ -164,7 +230,7 @@ class OXC {
     /** Loads a save AND creates a modlist **/
     public function loadSave($file, $path) {
         $file = $path.$file;
-        if (stripos($file, '.sav') === false)
+        if (stripos($file, '.sav') === false && stripos($file, '.asav') === false)
         {
             $file .= '.sav';
         }
@@ -559,7 +625,6 @@ class OXC {
             {
                 if (isset($project['producedItems'][$type]))
                 {
-
                     /** Respect Hidden Manufacturing Items **/
                     if (@$this->save->YAMLArray[1]['manufactureRuleStatus'][$name] == 2) { /** Respect Hidden Manufacturing Items **/
                         continue;
@@ -613,6 +678,8 @@ class OXC {
                                 'infinite' => 'false');
                 $this->save->YAMLArray[1]['bases'][$baseID]['productions'][] = $array;
             }
+
+
 
             /** Might as well check for subItems, if we can't get them, we don't care, but skip if qty is negative **/
             if (isset($this->loadedMods['manufacture'][$name]['requiredItems']) && $qty > 0)
@@ -699,11 +766,23 @@ class OXC {
         return $soldier;
     }
 
+    private function updateBaseBalance($soldier, $baseID, &$soldierBaseBalance) { /** short function to help build base balance **/
+        /** Use that info to figure out base composition **/
+        $type = $soldier['type'];
+
+        if (!is_null($this->soldierPsiStrMid[$soldier['type']])) {
+            if ($soldier['currentStats']['psiStrength'] < $this->soldierPsiStrMid[$soldier['type']])
+            {
+                $type .= "_X";
+            }
+        }
+
+        $soldierBaseBalance[$type][$baseID] ++;
+    }
     /** Gets base store count AND worn armor **/
     private function getStorageCount($type, $baseID) {
         $qty = 0;
 
-        print_r($type.PHP_EOL);
         if (isset($this->save->YAMLArray[1]['bases'][$baseID]['items'])) { /** Standard Base Stores **/
             $qty += $this->save->YAMLArray[1]['bases'][$baseID]['items'][$type];
         }
@@ -740,9 +819,9 @@ class OXC {
         }
 
         /** This grabs the item list from one of the craft loadouts **/
-        print_r($template);
         $key = 'globalCraftLoadout'.$template;
         if (!isset($this->save->YAMLArray[1][$key])) {
+            print_r(PHP_EOL.'** Template: '.$key,' DNE **'.PHP_EOL);
             $this->save->YAMLArray[1][$key] = array();
         }
 
@@ -773,7 +852,7 @@ class OXC {
 
                 /** Pull out the item transfers first, but cap at 0 - otherwise we will wind up cloning items **/
                 if (isset($enroute[$item])) {
-                    $qty =  max(($qty - $enroute[$item]), 0);
+                    $qty = max(($qty - $enroute[$item]), 0);
                 }
 
                 /** if needArray is negative, that means the base has extra and the items will be put into... escrow **/
@@ -806,6 +885,7 @@ class OXC {
                     else {
                         $cost = -1 * abs($needed * $this->loadedMods['items'][$item]['costBuy']);
                         $this->alterFunds($cost);
+                        //print_r($item);
                     }
                 }
                 if ($qty > 0) {
@@ -879,10 +959,15 @@ class OXC {
 
         /** Step 4.5 - I don't ever want to build less than 5 of an item, 10 for ammo **/
         foreach ($this->save->YAMLArray[1]['bases'][$base]['productions'] AS &$production) {
-            if (isset($this->loadedMods['items'][$production['item']]) && $this->loadedMods['items'][$production['item']]['battleType'] == 2 && $production['amount'] < 10) {
+            $qty = $production['amount'] = ceil($production['amount']); /** round up to nearest int **/
+            if (isset ($this->loadedMods['manufacture'][$production['item']]['producedItems'])) { /** for now, assume first item is the qty **/
+                $qty = $qty*current($this->loadedMods['manufacture'][$production['item']]['producedItems']);
+            }
+
+            if (isset($this->loadedMods['items'][$production['item']]) && $this->loadedMods['items'][$production['item']]['battleType'] == 2 && $qty < 10) {
                 $production['amount'] = 10;
             }
-            if ($production['amount'] < 5) {
+            if ($qty < 5) {
                 $production['amount'] = 5;
             }
         }
@@ -942,12 +1027,10 @@ class OXC {
         $waitingSoldiers     = array();  //This is for unnamed soldiers in training
         $soldierDeleteBuffer = array();
         $soldierBaseBalance  = array();  //This is to keep soldiers balanced across all active bases
-        $soldierPsiStrMid    = array();
         $soldierRelocation   = array();  //Container for soldiers needing a new home
 
         foreach($this->save->YAMLArray[1]['bases'] AS $baseID => $base) {
-            if (is_array($base['soldiers']))
-            {
+            if (is_array($base['soldiers'])) { /** primary loop **/
                 foreach ($base['soldiers'] AS $soldierID => $soldierCheck)
                 {
                     if (in_array($soldierCheck['name'], $this->defaultNames)) { /** Place 'unnamed soldiers' into a buffer **/
@@ -955,7 +1038,8 @@ class OXC {
                         $soldierDeleteBuffer[$wsKey] = array('baseID'=>$baseID, 'soldierID'=>$soldierID);
                         $wsKey++;
                     }
-                    else if (array_search($baseID, $activeBases) !== false) { /** figure out base soldier composition  **/
+                    else if (array_search($baseID, $activeBases) !== false) { /** figure out base soldier composition, including transfers TO the base  **/
+                        /** Initialize an array for a given type **/
                         if (!is_array($soldierBaseBalance[$soldierCheck['type']]))
                         {
                             $soldierBaseBalance[$soldierCheck['type']] = array();
@@ -964,8 +1048,9 @@ class OXC {
                                 $soldierBaseBalance[$soldierCheck['type']][$i] = 0;
                             }
                         }
+
                         /** build a temp array of mid psiStrength Values **/
-                        if (!isset($soldierPsiStrMid[$soldierCheck['type']])) {
+                        if (!isset($this->soldierPsiStrMid[$soldierCheck['type']])) {
                             foreach ($this->loadedMods['soldiers'] AS $nSS)
                             {
                                 if ($nSS['type'] == $soldierCheck['type'])
@@ -975,26 +1060,23 @@ class OXC {
                                     {
                                         $mid = NULL;
                                     }
-                                    $soldierPsiStrMid[$soldierCheck['type']] = $mid;
+                                    $this->soldierPsiStrMid[$soldierCheck['type']] = $mid;
                                 }
                             }
                         }
-                        /** Use that info to figure out base composition **/
-                        $type = $soldierCheck['type'];
 
-                        if (!is_null($soldierPsiStrMid[$soldierCheck['type']])) {
-                            if ($soldierCheck['currentStats']['psiStrength'] < $soldierPsiStrMid[$soldierCheck['type']])
-                            {
-                                $type .= "_X";
-                            }
-                        }
-
-                        $soldierBaseBalance[$type][$baseID] ++;
+                        $this->updateBaseBalance($soldierCheck, $baseID, $soldierBaseBalance);
+                    }
+                }
+            }
+            if (is_array($base['transfers']) && array_search($baseID, $activeBases) !== false) { /** check for soldiers enroute to base to make sure they are included in the balance **/
+                foreach($base['transfers'] as $transfer) {
+                    if (isset ($transfer['soldier'])) {
+                        $this->updateBaseBalance($transfer['soldier']   , $baseID, $soldierBaseBalance);
                     }
                 }
             }
         }
-
         /** sort waiting soldiers by soldier ID so that we are always pulling from the oldest soldiers to maximize training time. **/
         uasort($waitingSoldiers, function($a, $b) { return $a['id'] <=> $b['id']; });
 
@@ -1007,8 +1089,6 @@ class OXC {
             $living  = false;
             $soldier = array();
             $soldier = $this->save->YAMLArray[1]['deadSoldiers'][$key];
-
-            /** All Soldiers need 'transfer' time **/
             $soldier['recovery'] = 0;
 
             /** Ignore the Un-named **/
@@ -1069,8 +1149,6 @@ class OXC {
 
                 /** Use a new soldier, maintain diary **/
                 if (stripos($soldier['name'], '~') == false) { /** Use a new soldier, maintain diary (we use `~` to denote actual cloning **/
-
-
                     foreach ($soldier['currentStats'] AS $stat=>$value)
                     {
                         $newValue = rand($this->loadedMods['soldiers'][$soldier['type']]['minStats'][$stat], $this->loadedMods['soldiers'][$soldier['type']]['maxStats'][$stat]);
@@ -1155,7 +1233,7 @@ class OXC {
         foreach ($soldierRelocation AS $key => $soldier) {
             /* find out if PSI rod or not */
             $search_type = $soldier['type'];
-            if ($soldier['currentStats']['psiStrength'] < $soldierPsiStrMid[$soldier['type']])
+            if ($soldier['currentStats']['psiStrength'] < $this->soldierPsiStrMid[$soldier['type']])
             {
                 $search_type .= "_X";
             }
