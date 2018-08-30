@@ -677,6 +677,10 @@ class OXC {
                                 'amount' => $qty,
                                 'infinite' => 'false');
                 $this->save->YAMLArray[1]['bases'][$baseID]['productions'][] = $array;
+
+                /** pay for first item **/
+                $this->alterFunds(($this->loadedMods['manufacture'][$type]['cost']*-1));
+
             }
 
 
@@ -686,6 +690,14 @@ class OXC {
             {
                 foreach ($this->loadedMods['manufacture'][$name]['requiredItems'] AS $requiredItem => $requiredQty)
                 {
+                    /** subtract required items from store for first item, allow stores to go negative **/
+                    if ($found === false)
+                    {
+                        if (!isset($this->save->YAMLArray[1]['bases'][$baseID]['items'][$requiredItem])) {
+                            $this->save->YAMLArray[1]['bases'][$baseID]['items'][$requiredItem] = 0;
+                        }
+                        $this->save->YAMLArray[1]['bases'][$baseID]['items'][$requiredItem] -= $requiredQty;
+                    }
                     $this->acquireItem($requiredItem, $requiredQty*$qty, $baseID);
                 }
             }
