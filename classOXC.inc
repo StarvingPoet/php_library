@@ -234,11 +234,13 @@ class OXC {
         {
             $file .= '.sav';
         }
+
         $this->save = new YAML($file);
 
         /** Pull the mod list from the currently loaded save **/
         if (array_key_exists('mods', $this->save->YAMLArray[0]))
         {
+            unset($this->loadedMods);
             foreach ($this->save->YAMLArray[0]['mods'] AS $mod)
             {
                 $this->loadMod($mod);
@@ -284,6 +286,10 @@ class OXC {
             /** Update the loaded array with the new data **/
             $this->loadedMods[$cat] = array_replace_recursive($this->loadedMods[$cat], $data);
         }
+        unset($temp);
+        unset($cat);
+        unset($data);
+
     }
 
     /** Returns the base ID with the most total manufacturing space **/
@@ -856,27 +862,38 @@ class OXC {
             /* First see how much each base needs **/
             foreach ($this->save->YAMLArray[1]['bases'] AS $baseID => $baseArray)
             {
-                if (array_search($baseID, $bases) === false) { /** Limit to selected bases **/
-                    continue;
-                }
+                $transferQty = $qty;
+                $storeQty = 0;
+                $isDestinaton = array_search($baseID, $bases);  /** FALSE if base isn't a valid destination **/
 
                 $enroute = $this->activeTransfers($baseID, 'items');
 
                 /** Pull out the item transfers first, but cap at 0 - otherwise we will wind up cloning items **/
-                if (isset($enroute[$item])) {
-                    $qty = max(($qty - $enroute[$item]), 0);
+                if (isset($enroute[$item]) && $isDestination !== false) {
+                    $transferQty = max(($qty - $enroute[$item]), 0);
                 }
 
-                /** if needArray is negative, that means the base has extra and the items will be put into... escrow **/
+                /** Figure out how many extra items we have laying around **/
                 $storeQty = $this->getStorageCount($item, $baseID);
-                $needArray[$baseID][$item] = $qty - $storeQty;
+
+                /** if needArray is negative, that means the base has extra and the items will be put into... escrow **/
+                $needArray[$baseID][$item] = $transferQty - $storeQty;
 
                 if ($needArray[$baseID][$item] < 0) {
                     $floatArray[$item] += ( $needArray[$baseID][$item]* -1);
                     $this->save->YAMLArray[1]['bases'][$baseID]['items'][$item] += $needArray[$baseID][$item];
                     $needArray[$baseID][$item] = 0;
                 }
+
+                /** unset the needArray if base is not a valid destination **/
+                if ($isDestination === false) {
+                    $needArray[$baseID][$item] = 0;
+                }
+
+                //echo 'Base: '.$baseID.' Item: '.$item.' ('.$needArray[$baseID][$item].')'.PHP_EOL;
+                //echo PHP_EOL.$baseID.': '.($isDestination) ? 'true' : 'false';
             }
+
         }
 
         /** Step 2 **/
@@ -983,6 +1000,8 @@ class OXC {
                 $production['amount'] = 5;
             }
         }
+
+        return 'Bases Resupplied';
     }
 
     public function cloneSoldiers($reviveLimit = 99, $activeBases = 1) {
@@ -1052,11 +1071,9 @@ class OXC {
                     }
                     else if (array_search($baseID, $activeBases) !== false) { /** figure out base soldier composition, including transfers TO the base  **/
                         /** Initialize an array for a given type **/
-                        if (!is_array($soldierBaseBalance[$soldierCheck['type']]))
-                        {
+                        if (!is_array($soldierBaseBalance[$soldierCheck['type']])) {
                             $soldierBaseBalance[$soldierCheck['type']] = array();
-                            foreach($activeBases as $i)
-                            {
+                            foreach($activeBases as $i) {
                                 $soldierBaseBalance[$soldierCheck['type']][$i] = 0;
                             }
                         }
@@ -1129,10 +1146,24 @@ class OXC {
                         $soldier['training']    = 'false';
                         $living                 = true;
 
+                        /** remove armor and place back in base stores **/
+                        if ($soldier['armor'] != $this->loadedMods['soldiers'][$soldier['type']]['armor']) {
+                            echo "Removing: ".$soldier['armor']." from: ".$soldierDeleteBuffer[$wsKey]['baseID'].PHP_EOL;
+                            $armorItem = $this->loadedMods['armors'][$soldier['armor']]['storeItem'];
+                            if (!isset($this->save->YAMLArray[1]['bases'][$soldierDeleteBuffer[$wsKey]['baseID']]['items'][$armorItem])) { /** If armor doesn't exist in stores, create it **/
+                                $this->save->YAMLArray[1]['bases'][$soldierDeleteBuffer[$wsKey]['baseID']]['items'][$armorItem] = 0;
+                                echo "  Creating Armor Entry".PHP_EOL;
+                            }
+                            $this->save->YAMLArray[1]['bases'][$soldierDeleteBuffer[$wsKey]['baseID']]['items'][$armorItem] += 1;
+                            $soldier['armor'] = $this->loadedMods['soldiers'][$soldier['type']]['armor'];
+                            unset($armorItem);
+                        }
 
                         /** create new replacement **/
                         $replacement = $this->createSoldier($soldier['type'], $ws['name']);
                         $this->transferSoldier($replacement, $soldierDeleteBuffer[$wsKey]['baseID'], true);
+
+
 
                         unset($this->save->YAMLArray[1]['bases'][$soldierDeleteBuffer[$wsKey]['baseID']]['soldiers'][$soldierDeleteBuffer[$wsKey]['soldierID']]);
                         unset($waitingSoldiers[$wsKey]);
@@ -1150,7 +1181,7 @@ class OXC {
             if ($living == false)
             {
                 /** Initialize stats and armor **/
-                $soldier['armor'] =$this->loadedMods['soldiers'][$soldier['type']]['armor'];
+                $soldier['armor'] = $this->loadedMods['soldiers'][$soldier['type']]['armor'];
                 unset($soldier['death']);
 
                 /** Initialize other stats **/

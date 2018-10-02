@@ -34,16 +34,16 @@ class YAML {
             if (extension_loaded('yaml'))
             {
                 $this->YAMLArray = yaml_parse_file($this->fileName, $pos, $ndocs, array(YAML_BOOL_TAG => array($this, 'yaml_tag_callback'),
-                                                                                      'true' => array($this, 'yaml_tag_callback')                                                                                      
-                                                                                      ));                
+                                                                                      'true' => array($this, 'yaml_tag_callback')
+                                                                                      ));
                 /*foreach($this->YAMLArray[1]['missionStatistics'] as $x) {
                     var_dump($x['success']);
                 }*/
             }
             else
-            {                
+            {
                 $this->fileArray = explode(PHP_EOL, file_get_contents($this->fileName));
-                $this->YAMLArray = $this->YAMLtoArray();                
+                $this->YAMLArray = $this->YAMLtoArray();
                 trigger_error('Running without the YAML Extension loaded is deprecated', E_USER_WARNING);
             }
         }
@@ -87,7 +87,7 @@ class YAML {
         else if (is_numeric($value))
         {
             return filter_var($value, FILTER_VALIDATE_INT);
-        }    
+        }
         else /**convert to bool, convert back to string **/
         {
             $bool = filter_var($value, FILTER_VALIDATE_BOOLEAN);
@@ -300,14 +300,24 @@ class YAML {
         }
         $string = implode(PHP_EOL, $array);
 
+        /** Unset array references that persist after loop **/
+        $array = $k = $row = null;
+
         /* Only run on final pass fixes a single instance */
         if ($depth === 0)
         {
             $string = str_replace('- --', '---', $string);
             $string = str_replace('- {}', '{}', $string);
 			$string = preg_replace('/-{3,}/', '---', $string);
-        }                
+        }
+
         return $string;
+    }
+
+    private function mem() {
+        echo PHP_EOL.memory_get_usage(true).PHP_EOL;
+        ob_flush();
+
     }
 
     /**
@@ -322,14 +332,15 @@ class YAML {
         {
             if (is_numeric(key($this->YAMLArray))) /** this assumes the yaml parser loaded multiple files **/
             {
-                foreach ($this->YAMLArray AS $array)
+                foreach ($this->YAMLArray AS &$array)
                 {
-                    if (is_array($array)) {                    
+                    if (is_array($array)) {
                         ksort($array);
                     }
                     $string .= $this->ArraytoYAML($array);
                     $string .= PHP_EOL."---".PHP_EOL;
                 }
+                unset($array);
             }
             else
             {
@@ -345,7 +356,13 @@ class YAML {
         {
             $file = $this->fileName;
         }
-        return file_put_contents($file, $string);
+
+
+        $return = file_put_contents($file, $string);
+        unset($string);
+
+
+        return $return;
     }
 }
 ?>
