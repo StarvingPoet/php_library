@@ -1144,6 +1144,7 @@ class OXC {
                         $soldier['look']        = $this->save->YAMLArray[1]['deadSoldiers'][$key]['look'];
                         $soldier['lookVariant'] = $this->save->YAMLArray[1]['deadSoldiers'][$key]['lookVariant'];
                         $soldier['training']    = 'false';
+                        $soldier['psiTraining'] = 'false';
                         $living                 = true;
 
                         /** remove armor and place back in base stores **/
@@ -1186,6 +1187,7 @@ class OXC {
 
                 /** Initialize other stats **/
                 $soldier['training']          = 'false';
+                $soldier['psiTraining']       = 'false';
                 $soldier['improvement']       = 0;
                 $soldier['psiStrimprovement'] = 0;
                 $soldier['rank']              = 0;
