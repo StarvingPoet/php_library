@@ -36,6 +36,11 @@ class CLI {
         $this->rows      = $rows;
         $this->multiline = 0;
 
+		if (!$title) {
+			return true;
+		}
+
+
         /** Resize the cmd window **/
         $this->_resize($cols, $rows);
 
@@ -250,10 +255,16 @@ class CLI {
             $cmd = "TITLE ".$title;
             shell_exec(escapeshellcmd($cmd));
 
+			$output = array("\r",
+							str_repeat("-", $length)."\n",
+							$title."\n",
+							str_repeat("-", $length)."\n");
+			$this->clout($output);
+			/*
             $this->clout("\r");
-            $this->clout(str_repeat("-", $length)."\n");
+            $this->clout();
             $this->clout($title."\n");
-            $this->clout(str_repeat("-", $length)."\n");
+            $this->clout(str_repeat("-", $length)."\n");*/
         }
     }
 

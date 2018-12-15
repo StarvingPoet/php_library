@@ -19,7 +19,8 @@ class OXC {
     var $canTransfer  = array();
     var $defaultNames = null;
     var $soldierPsiStrMid = array();
-    var $mfgBase = 2;
+    var $mfgBase = 0;
+	var $stdin = null;
 
     /** Initiated with pointer to mod directory **/
     public function __construct($modDir) {
@@ -35,7 +36,9 @@ class OXC {
     }
 
     function __destruct() {
-        $this->mods = NULL;
+        unset($this->mods);
+		unset($this->save);
+		unset($this->loadedMods);
     }
 
     /** This throws an exception that will be caught in main script.
@@ -55,8 +58,27 @@ class OXC {
         throw new exception ($details, $this->errorStatus);
     }
 
+	private function debug(&$data) {
+
+		if (!$this->stdin) {
+			$this->stdin = fopen('php://stdin' , 'r');
+		}
+
+		print_r(PHP_EOL);
+		print_r($data);
+		print_r(PHP_EOL);
+		print_r("-break point-");
+		ob_flush();
+		fgets($this->stdin);
+
+
+		return true;
+
+	}
+
     /** This fixes all ammo manufacturing to create bulk ammo jobs at 10x instead of the current singleton system **/
     public function fixAmmoManufacturing() {
+		$debug = memory_get_usage();
         $newManufacture = array();
         $i = 0;
 
@@ -188,6 +210,9 @@ class OXC {
                 }
             }
         }
+
+		unset($lib);
+		unset($yaml);
     }
 
     /** reindexes mods so that they type is used as a key when available **/
@@ -229,7 +254,12 @@ class OXC {
 
     /** Loads a save AND creates a modlist **/
     public function loadSave($file, $path) {
-        $file = $path.$file;
+
+		if (isset($this->save)) {
+			unset($this->save);
+		}
+
+		$file = $path.$file;
         if (stripos($file, '.sav') === false && stripos($file, '.asav') === false)
         {
             $file .= '.sav';
@@ -290,6 +320,8 @@ class OXC {
         unset($cat);
         unset($data);
 
+		file_put_contents($GLOBALS['global']['tempDir'].'loadedMods.rul', print_r($this->loadedMods, TRUE));
+
     }
 
     /** Returns the base ID with the most total manufacturing space **/
@@ -304,8 +336,10 @@ class OXC {
                 }
             }
         }
+		unset ($base);
 
         $max = max($space);
+
         return array_search($max, $space);
     }
 
@@ -328,6 +362,7 @@ class OXC {
             }
         }
 
+		unset ($row);
         return $space;
     }
 
@@ -352,6 +387,7 @@ class OXC {
                 }
             }
         }
+		unset($craft);
 
         /** Don't forget existing transfers **/
         if ($includeTransfer)
@@ -567,18 +603,25 @@ class OXC {
     /** First tries to buy item, then if not possible, tries to manufacture - respects hidden entries **/
     private function acquireItem($type, $qty, $baseID) {
         $return = $this->buyItem($type, $qty, $baseID);
-        if ($return === false)
-        {
+        if (!$return) {
             $return = $this->produceItem($type, $qty, $this->mfgBase);
         }
         return $return;
     }
 
-    private function buyItem($type, $qty, $baseID) {
+    /** Checks to see if an item is purchasable - respects hidden items **/
+	private function canBuy ($type)	{
+		if (!isset($this->loadedMods['items'][$type]['costBuy']) || @$this->save->YAMLArray[1]['hiddenPurchaseItems'][$type] == true) { /** Unable to Buy **/
+            return false;
+        }
+		return true;
+	}
+
+	private function buyItem($type, $qty, $baseID) {
         $return = true;
         /** see if item can be bought - respects hiddenPurchaseItems **/
-        if (!isset($this->loadedMods['items'][$type]['cost']) || @$this->save->YAMLArray[1]['hiddenPurchaseItems'][$type] == true) { /** Unable to Buy **/
-            return false;;
+        if (!$this->canBuy($type)) {
+            return false;
         }
         /** see if item is researched **/
         else if (is_array($this->loadedMods['items'][$type]['requiresBuy'])) {
@@ -589,8 +632,7 @@ class OXC {
             }
         }
 
-
-        $return = $this->transferItem($type, $qty, $baseID, false);
+		$return = $this->transferItem($type, $qty, $baseID, false);
 
         if ($return) {
             $cost = -1 * abs($needed * $this->loadedMods['items'][$item]['costBuy']);
@@ -607,9 +649,9 @@ class OXC {
      * Note: To prevent an entry from being manufactured - hide it via right clicking in oxce+
      */
     private function produceItem ($type, $qty, $baseID) {
-        if ($qty < 0)
+        if ($qty <= 0)
         {
-            //echo PHP_EOL.$type.' is negative ('.$qty.')'.PHP_EOL;
+			return true;
         }
 
         /** See if item can be manufactured **/
@@ -625,9 +667,9 @@ class OXC {
                 $qty = $qty / $this->loadedMods['manufacture'][$type]['producedItems'][$type];
             }
         }
-        else
+        else /** else we need to cycle through **/
         {
-            foreach ($this->loadedMods['manufacture'] as $name=>$project)
+            foreach ($this->loadedMods['manufacture'] as $name=>&$project)
             {
                 if (isset($project['producedItems'][$type]))
                 {
@@ -635,6 +677,12 @@ class OXC {
                     if (@$this->save->YAMLArray[1]['manufactureRuleStatus'][$name] == 2) { /** Respect Hidden Manufacturing Items **/
                         continue;
                     }
+
+					/** Skip Disassembly Items for automation **/
+					if (stripos($this->loadedMods['en-US'][$name],'disassembly') !== false ||
+						stripos($this->loadedMods['en-US'][$name],'blood plasma:') !== false) {
+						continue;
+					}
 
                     /** Check to make sure we are allowed to use this project **/
                     if (is_array($project['requires']))
@@ -652,10 +700,12 @@ class OXC {
                     break;
                 }
             }
+			unset($project);
         }
 
         if ($return) { /** we can produce this item **/
-            /** See if Array Exists **/
+
+		    /** See if Array Exists **/
             if (!isset($this->save->YAMLArray[1]['bases'][$baseID]['productions'])) {
                 $this->save->YAMLArray[1]['bases'][$baseID]['productions'] = array();
             }
@@ -689,8 +739,6 @@ class OXC {
 
             }
 
-
-
             /** Might as well check for subItems, if we can't get them, we don't care, but skip if qty is negative **/
             if (isset($this->loadedMods['manufacture'][$name]['requiredItems']) && $qty > 0)
             {
@@ -703,8 +751,9 @@ class OXC {
                             $this->save->YAMLArray[1]['bases'][$baseID]['items'][$requiredItem] = 0;
                         }
                         $this->save->YAMLArray[1]['bases'][$baseID]['items'][$requiredItem] -= $requiredQty;
-                    }
-                    $this->acquireItem($requiredItem, $requiredQty*$qty, $baseID);
+					}
+
+					$this->acquireItem($requiredItem, $requiredQty*$qty, $baseID);
                 }
             }
         }
@@ -821,13 +870,16 @@ class OXC {
     public function resupplyBases($template = 0, $bases = 1) {
         if (is_numeric($bases)) {
             $temp = array();
+
             for ($i = 0; $i < $bases; $i++) {
                 $temp[] = $i;
             }
             $bases = $temp;
+
             unset($temp);
         }
 
+		/** Error in Inputs **/
         if (!isset($this->save->YAMLArray[1])) {
             $this->_errorHandler(__FUNCTION__, 'Save File Not loaded or improperly formatted');
         }
@@ -835,6 +887,8 @@ class OXC {
         if (!is_array($bases)) {
             $this->_errorHandler(__FUNCTION__, '$base variable needs to be an array');
         }
+
+		$this->mfgBase = $this->findManufacturingBase();
 
         /** This grabs the item list from one of the craft loadouts **/
         $key = 'globalCraftLoadout'.$template;
@@ -846,160 +900,119 @@ class OXC {
         $resupply = $this->save->YAMLArray[1][$key];
 
         /** I'm going to iterate through the bases a couple times:
-         *  Step 1: Figure out who needs what, and if we have extras, put extras in escrow
-         *  Step 2: Distribute Extras, buy items or queue manufacturing.
-         *  step 3: Distribute Extra Extras
-         *  step 4: Make Manufacture TODO
+         *  Step 1: Move around existing items as needed
+         *  Step 2: Buy or Manufacture New items
+         *  step 3: Modify Production queue to new minimums
          */
-        $cantBuyArray     = array();
-        $buyArray         = array();
+		$storedArray      = array();
         $needArray        = array();
-        $floatArray       = array();
-        $storageFull      = array();
 
         /** Step 1 **/
+
         foreach ($resupply as $item => $qty) {
-            /* First see how much each base needs **/
-            foreach ($this->save->YAMLArray[1]['bases'] AS $baseID => $baseArray)
-            {
-                $transferQty = $qty;
-                $storeQty = 0;
-                $isDestinaton = array_search($baseID, $bases);  /** FALSE if base isn't a valid destination **/
 
-                $enroute = $this->activeTransfers($baseID, 'items');
+            /** First see how much each base has extra**/
+			for ($baseID=0; isset($this->save->YAMLArray[1]['bases'][$baseID]); $baseID++) {
+				$stored = $this->getStorageCount($item, $baseID);
+				if ($stored > 0) {
+					/** I want to make sure that each base still has at least the template minimum even if they're not being resupplied - UNLESS it's the mfgbase. **/
+					$storedArray[$item][$baseID] = max($stored-$resupply[$item], 0);
 
-                /** Pull out the item transfers first, but cap at 0 - otherwise we will wind up cloning items **/
-                if (isset($enroute[$item]) && $isDestination !== false) {
-                    $transferQty = max(($qty - $enroute[$item]), 0);
-                }
+				if ($baseID == $mfgBase) {
+						$storedArray[$item][$baseID] = $stored;
+					}
+				}
 
-                /** Figure out how many extra items we have laying around **/
-                $storeQty = $this->getStorageCount($item, $baseID);
+				if ($storedArray[$item][$baseID] == 0) {
+					unset($storedArray[$item][$baseID]);
+				}
+            }
 
-                /** if needArray is negative, that means the base has extra and the items will be put into... escrow **/
-                $needArray[$baseID][$item] = $transferQty - $storeQty;
+			if (empty($storedArray[$item])) {
+				unset($storedArray[$item]);
+			}
 
-                if ($needArray[$baseID][$item] < 0) {
-                    $floatArray[$item] += ( $needArray[$baseID][$item]* -1);
-                    $this->save->YAMLArray[1]['bases'][$baseID]['items'][$item] += $needArray[$baseID][$item];
-                    $needArray[$baseID][$item] = 0;
-                }
+			/** Find out how much we need after excess is taken into account **/
+            for ($baseID=0; isset($this->save->YAMLArray[1]['bases'][$baseID]); $baseID++) {
+				if (in_array($baseID, $bases, true)) {/** FALSE if base isn't a valid destination **/
 
-                /** unset the needArray if base is not a valid destination **/
-                if ($isDestination === false) {
-                    $needArray[$baseID][$item] = 0;
-                }
+					/** Pull out items in stores **/
+					$transferQty = max($qty-$this->getStorageCount($item, $baseID), 0);
 
-                //echo 'Base: '.$baseID.' Item: '.$item.' ('.$needArray[$baseID][$item].')'.PHP_EOL;
-                //echo PHP_EOL.$baseID.': '.($isDestination) ? 'true' : 'false';
+					/** Pull out the item transfers first, but cap at 0 - otherwise we will wind up cloning items **/
+					$enroute = $this->activeTransfers($baseID, 'items');
+					if (isset($enroute[$item])) {
+						$transferQty = max(($qty - $enroute[$item]), 0);
+					}
+
+					/** Still Need Items, let's check the stored Items - unfortunately we just go left to right **/
+					if ($transferQty > 0) {
+						if (isset($storedArray[$item])) {
+							foreach ($storedArray[$item] as $storedBase => $storedQty) {
+								if ($storedQty >= $transferQty) { /** have more in a single base than we need **/
+									if ($this->transferItem($item, $transferQty, $baseID)) {
+										$storedArray[$item][$storedBase] -= $transferQty;
+										//$floatArray[$item] += $transferQty; /** Place in escrow **/
+										$this->save->YAMLArray[1]['bases'][$storedBase]['items'][$item] -= $transferQty; /** alter base stores **/
+										$transferQty = 0;
+										break; /** leave **/
+									}
+								}
+								else {
+									if ($this->transferItem($item, $storedQty, $baseID)) {
+										$storedArray[$item][$storedBase] = 0;
+										//$floatArray[$item] += $storedQty; /** Place in escrow **/
+										$this->save->YAMLArray[1]['bases'][$storedBase]['items'][$item] -= $storedQty; /** alter base stores **/
+										$transferQty -= $storedQty;
+									}
+								}
+
+								if ($storedArray[$item][$storedBase] <= 0) {
+									unset ($storedArray[$item][$storedBase]);
+								}
+							}
+						}
+					}
+
+					/** Items that still need to be acquired **/
+					$needArray[$baseID][$item] = $transferQty;
+
+					if ($needArray[$baseID][$item] == 0) {
+						unset($needArray[$baseID][$item]);
+					}
+				}
             }
 
         }
+		unset ($resupply);
 
         /** Step 2 **/
         foreach ($needArray as $baseID => $needs) {
             foreach ($needs as $item => $qty) {
-                /** We have the item in escrow **/
-                if ($floatArray[$item] >= $qty) {
-                    $floatArray[$item] -= $qty;
-                }
-                else {
-                    $needed = $qty - $floatArray[$item];
-                    /** First see if it has to be found / manufactured **/
-                    if (!isset($this->loadedMods['items'][$item]['costBuy']) || $this->loadedMods['items'][$item]['costBuy'] < 1) {
-                        $cantBuyArray[$item] += $needed;
-                        $qty = $floatArray[$item];
-                        $floatArray[$item] = 0;
-                    }
-                    else {
-                        $cost = -1 * abs($needed * $this->loadedMods['items'][$item]['costBuy']);
-                        $this->alterFunds($cost);
-                        //print_r($item);
-                    }
-                }
-                if ($qty > 0) {
-                    $sent = $this->transferItem($item, $qty, $baseID);
-
-                    /** if we can't transfer, put the item back in escrow **/
-                    if ($sent === false) {
-                        $floatArray[$item] += $qty;
-                    }
-                }
+				if ($this->acquireItem($item, $qty, $baseID)) {
+					unset ($needArray[$baseID][$item]);
+				}
             }
         }
+		unset($needArray);
+		unset($storedArray);
 
-        /** Step 3 **/
-        foreach ($floatArray AS $item => $qty) {
-            $divisor = 0;
-            $canTransfer = array();
-            foreach ($this->save->YAMLArray[1]['bases'] AS $id => $base)
-            {
-                if (is_array($bases)) { /** Limit to selected bases **/
-                    if (array_search($id, $bases) === false) {
-                        continue;
-                    }
-                }
-
-                if ($this->canTransfer($item, $qty, $id))
-                {
-                    $canTransfer[] = $id;
-                    $divisor += 1;
-                }
-            }
-
-            /** excess items are lost in the nether - the price we pay! **/
-            if ($divisor === 0) {
-                continue;
-            }
-
-            $dist = floor($qty / $divisor);
-            $first = true;
-            foreach ($canTransfer as $baseID)
-            {
-                $newQty = $dist;
-
-                /** I'm just going to assume the first base will always be able to hold a couple more, don't charge for these since they were not needed to be transferred **/
-                if ($first === true)
-                {
-                    $mod = $qty % $divisor;
-                    $newQty += $mod;
-                }
-
-                if ($newQty > 0)
-                {
-                    $this->transferItem($item, $newQty, $baseID, false);
-                }
-
-                $first = false;
-            }
-            unset($floatArray[$item]);
-        }
-
-        /** Step 4 **/
-        $base = $this->findManufacturingBase();
-        foreach ($cantBuyArray AS $item => $qty) {
-            /** We will always place the manufacturing in the base with the most engineering capacity **/
-
-            /** First see if anyone is making this item, subtract from qty **/
-            $check = 0;
-            $check = $this->activeProduction($item);
-            $this->produceItem($item, $qty-$check, $base);
-        }
-
-        /** Step 4.5 - I don't ever want to build less than 5 of an item, 10 for ammo **/
-        foreach ($this->save->YAMLArray[1]['bases'][$base]['productions'] AS &$production) {
+        /** Step 3 - Make sure everything is rounded up to the next integer **/
+        foreach ($this->save->YAMLArray[1]['bases'][$this->mfgBase]['productions'] AS &$production) {
             $qty = $production['amount'] = ceil($production['amount']); /** round up to nearest int **/
-            if (isset ($this->loadedMods['manufacture'][$production['item']]['producedItems'])) { /** for now, assume first item is the qty **/
-                $qty = $qty*current($this->loadedMods['manufacture'][$production['item']]['producedItems']);
-            }
 
+			/*if (isset ($this->loadedMods['manufacture'][$production['item']]['producedItems'])) { /** for now, assume first item is the qty **
+                $qty = $qty*current($this->loadedMods['manufacture'][$production['item']]['producedItems']);
+            }*/
+			/*
             if (isset($this->loadedMods['items'][$production['item']]) && $this->loadedMods['items'][$production['item']]['battleType'] == 2 && $qty < 10) {
                 $production['amount'] = 10;
             }
             if ($qty < 5) {
                 $production['amount'] = 5;
-            }
+            }*/
         }
+		unset ($production);
 
         return 'Bases Resupplied';
     }
@@ -1064,36 +1077,37 @@ class OXC {
             if (is_array($base['soldiers'])) { /** primary loop **/
                 foreach ($base['soldiers'] AS $soldierID => $soldierCheck)
                 {
+					/** Initialize an array for a given type **/
+					if (!is_array($soldierBaseBalance[$soldierCheck['type']])) {
+						$soldierBaseBalance[$soldierCheck['type']] = array();
+						foreach($activeBases as $i) {
+							$soldierBaseBalance[$soldierCheck['type']][$i] = 0;
+						}
+					}
+
+					/** build a reference array of mid psiStrength Values **/
+					if (!isset($this->soldierPsiStrMid[$soldierCheck['type']])) {
+						foreach ($this->loadedMods['soldiers'] AS $nSS)
+						{
+							if ($nSS['type'] == $soldierCheck['type'])
+							{
+								$mid = (($nSS['maxStats']['psiStrength'] - $nSS['minStats']['psiStrength']) / 2) + $nSS['minStats']['psiStrength'];
+								if ($mid == $nSS['minStats']['psiStrength'])
+								{
+									$mid = NULL;
+								}
+								$this->soldierPsiStrMid[$soldierCheck['type']] = $mid;
+							}
+						}
+					}
+
+
                     if (in_array($soldierCheck['name'], $this->defaultNames)) { /** Place 'unnamed soldiers' into a buffer **/
                         $waitingSoldiers[$wsKey]     = $soldierCheck;
                         $soldierDeleteBuffer[$wsKey] = array('baseID'=>$baseID, 'soldierID'=>$soldierID);
                         $wsKey++;
                     }
-                    else if (array_search($baseID, $activeBases) !== false) { /** figure out base soldier composition, including transfers TO the base  **/
-                        /** Initialize an array for a given type **/
-                        if (!is_array($soldierBaseBalance[$soldierCheck['type']])) {
-                            $soldierBaseBalance[$soldierCheck['type']] = array();
-                            foreach($activeBases as $i) {
-                                $soldierBaseBalance[$soldierCheck['type']][$i] = 0;
-                            }
-                        }
-
-                        /** build a temp array of mid psiStrength Values **/
-                        if (!isset($this->soldierPsiStrMid[$soldierCheck['type']])) {
-                            foreach ($this->loadedMods['soldiers'] AS $nSS)
-                            {
-                                if ($nSS['type'] == $soldierCheck['type'])
-                                {
-                                    $mid = (($nSS['maxStats']['psiStrength'] - $nSS['minStats']['psiStrength']) / 2) + $nSS['minStats']['psiStrength'];
-                                    if ($mid == $nSS['minStats']['psiStrength'])
-                                    {
-                                        $mid = NULL;
-                                    }
-                                    $this->soldierPsiStrMid[$soldierCheck['type']] = $mid;
-                                }
-                            }
-                        }
-
+					else if (array_search($baseID, $activeBases) !== false) { /** figure out base soldier composition, including transfers TO the base  **/
                         $this->updateBaseBalance($soldierCheck, $baseID, $soldierBaseBalance);
                     }
                 }
@@ -1110,7 +1124,7 @@ class OXC {
         uasort($waitingSoldiers, function($a, $b) { return $a['id'] <=> $b['id']; });
 
         ksort($soldierBaseBalance, SORT_NATURAL); /** Array of soldier types by base with low-PSI strength breakdown **/
-        //print_r($soldierBaseBalance);
+        print_r($soldierBaseBalance);
 
         /** BRAAAAAIIIINNNNSSSS **/
         foreach($newlyDead as $key=>$name) {
@@ -1179,8 +1193,7 @@ class OXC {
                 $soldier['name'] = $name." ".($counts[$name] + 1);
             }
 
-            if ($living == false)
-            {
+            if ($living == false) {
                 /** Initialize stats and armor **/
                 $soldier['armor'] = $this->loadedMods['soldiers'][$soldier['type']]['armor'];
                 unset($soldier['death']);
@@ -1282,6 +1295,12 @@ class OXC {
             {
                 $search_type .= "_X";
             }
+
+			/*
+
+			if (!isset($soldierBaseBalance[$search_type])) {
+				$soldierBaseBalance[$search_type] = array();
+			}*/
 
             $index = array_search(min($soldierBaseBalance[$search_type]), $soldierBaseBalance[$search_type]);
             $soldierBaseBalance[$search_type][$index] ++;

@@ -21,8 +21,7 @@ class YAML {
     private $errorStatus = 0;
     private $errorLog    = '';
 
-    public function __construct($fileName, $pos = -1)
-    {
+    public function __construct($fileName, $pos = -1) {
         $this->fileName = $fileName;
 
         if (!is_file($this->fileName))
@@ -36,9 +35,6 @@ class YAML {
                 $this->YAMLArray = yaml_parse_file($this->fileName, $pos, $ndocs, array(YAML_BOOL_TAG => array($this, 'yaml_tag_callback'),
                                                                                       'true' => array($this, 'yaml_tag_callback')
                                                                                       ));
-                /*foreach($this->YAMLArray[1]['missionStatistics'] as $x) {
-                    var_dump($x['success']);
-                }*/
             }
             else
             {
@@ -51,10 +47,10 @@ class YAML {
         $this->fileArray = array();
     }
 
-    function __destruct()
-    {
-        $this->fileArray = NULL;
-        $this->YAMLArray = NULL;
+    public function __destruct() {
+        unset($this->fileArray);
+        unset($this->YAMLArray);
+		unset ($this->fileName);
     }
 
     /**
@@ -75,6 +71,24 @@ class YAML {
 
         //throw new exception ($details, $this->errorStatus);
     }
+
+	private function debug(&$data) {
+
+		if (!$this->stdin) {
+			$this->stdin = fopen('php://stdin' , 'r');
+		}
+
+		print_r(PHP_EOL);
+		print_r($data);
+		print_r(PHP_EOL);
+		print_r("-break point-");
+		ob_flush();
+		fgets($this->stdin);
+		print_r(PHP_EOL);
+
+		return true;
+
+	}
 
     /**
      * This is a fix so that y: scalars don't get interpretad as true, in addition, all other bools are properly typecasted
@@ -360,7 +374,6 @@ class YAML {
 
         $return = file_put_contents($file, $string);
         unset($string);
-
 
         return $return;
     }
